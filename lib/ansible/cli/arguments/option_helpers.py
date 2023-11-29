@@ -53,7 +53,7 @@ class UnrecognizedArgument(argparse.Action):
                                                    default=default, required=required, help=help)
 
     def __call__(self, parser, namespace, values, option_string=None):
-        parser.error('unrecognized arguments: %s' % option_string)
+        parser.error(f'unrecognized arguments: {option_string}')
 
 
 class PrependListAction(argparse.Action):
@@ -83,7 +83,7 @@ class PrependListAction(argparse.Action):
 
     def __call__(self, parser, namespace, values, option_string=None):
         items = copy.copy(ensure_value(namespace, self.dest, []))
-        items[0:0] = values
+        items[:0] = values
         setattr(namespace, self.dest, items)
 
 
@@ -102,63 +102,62 @@ def unfrack_path(pathsep=False, follow=True):
         if pathsep:
             return [unfrackpath(x, follow=follow) for x in value.split(os.pathsep) if x]
 
-        if value == '-':
-            return value
+        return value if value == '-' else unfrackpath(value, follow=follow)
 
-        return unfrackpath(value, follow=follow)
     return inner
 
 
 def maybe_unfrack_path(beacon):
 
     def inner(value):
-        if value.startswith(beacon):
-            return beacon + unfrackpath(value[1:])
-        return value
+        return beacon + unfrackpath(value[1:]) if value.startswith(beacon) else value
+
     return inner
 
 
 def _git_repo_info(repo_path):
     """ returns a string containing git branch, commit id and commit date """
     result = None
-    if os.path.exists(repo_path):
+    if not os.path.exists(repo_path):
+        return ''
         # Check if the .git is a file. If it is a file, it means that we are in a submodule structure.
-        if os.path.isfile(repo_path):
-            try:
-                with open(repo_path) as f:
-                    gitdir = yaml_load(f).get('gitdir')
+    if os.path.isfile(repo_path):
+        try:
+            with open(repo_path) as f:
+                gitdir = yaml_load(f).get('gitdir')
                 # There is a possibility the .git file to have an absolute path.
-                if os.path.isabs(gitdir):
-                    repo_path = gitdir
-                else:
-                    repo_path = os.path.join(repo_path[:-4], gitdir)
-            except (IOError, AttributeError):
-                return ''
-        with open(os.path.join(repo_path, "HEAD")) as f:
-            line = f.readline().rstrip("\n")
-            if line.startswith("ref:"):
-                branch_path = os.path.join(repo_path, line[5:])
-            else:
-                branch_path = None
-        if branch_path and os.path.exists(branch_path):
-            branch = '/'.join(line.split('/')[2:])
-            with open(branch_path) as f:
-                commit = f.readline()[:10]
-        else:
-            # detached HEAD
-            commit = line[:10]
-            branch = 'detached HEAD'
-            branch_path = os.path.join(repo_path, "HEAD")
-
-        date = time.localtime(os.stat(branch_path).st_mtime)
-        if time.daylight == 0:
-            offset = time.timezone
-        else:
-            offset = time.altzone
-        result = "({0} {1}) last updated {2} (GMT {3:+04d})".format(branch, commit, time.strftime("%Y/%m/%d %H:%M:%S", date), int(offset / -36))
+            repo_path = (
+                gitdir
+                if os.path.isabs(gitdir)
+                else os.path.join(repo_path[:-4], gitdir)
+            )
+        except (IOError, AttributeError):
+            return ''
+    with open(os.path.join(repo_path, "HEAD")) as f:
+        line = f.readline().rstrip("\n")
+        branch_path = (
+            os.path.join(repo_path, line[5:])
+            if line.startswith("ref:")
+            else None
+        )
+    if branch_path and os.path.exists(branch_path):
+        branch = '/'.join(line.split('/')[2:])
+        with open(branch_path) as f:
+            commit = f.readline()[:10]
     else:
-        result = ''
-    return result
+        # detached HEAD
+        commit = line[:10]
+        branch = 'detached HEAD'
+        branch_path = os.path.join(repo_path, "HEAD")
+
+    date = time.localtime(os.stat(branch_path).st_mtime)
+    offset = time.timezone if time.daylight == 0 else time.altzone
+    return "({0} {1}) last updated {2} (GMT {3:+04d})".format(
+        branch,
+        commit,
+        time.strftime("%Y/%m/%d %H:%M:%S", date),
+        int(offset / -36),
+    )
 
 
 def _gitinfo():
@@ -174,21 +173,28 @@ def version(prog=None):
     else:
         result = [__version__]
 
-    gitinfo = _gitinfo()
-    if gitinfo:
+    if gitinfo := _gitinfo():
         result[0] = "{0} {1}".format(result[0], gitinfo)
-    result.append("  config file = %s" % C.CONFIG_FILE)
+    result.append(f"  config file = {C.CONFIG_FILE}")
     if C.DEFAULT_MODULE_PATH is None:
         cpath = "Default w/o overrides"
     else:
         cpath = C.DEFAULT_MODULE_PATH
-    result.append("  configured module search path = %s" % cpath)
-    result.append("  ansible python module location = %s" % ':'.join(ansible.__path__))
-    result.append("  ansible collection location = %s" % ':'.join(C.COLLECTIONS_PATHS))
-    result.append("  executable location = %s" % sys.argv[0])
-    result.append("  python version = %s (%s)" % (''.join(sys.version.splitlines()), to_native(sys.executable)))
-    result.append("  jinja version = %s" % j2_version)
-    result.append("  libyaml = %s" % HAS_LIBYAML)
+    result.extend(
+        (
+            f"  configured module search path = {cpath}",
+            f"  ansible python module location = {':'.join(ansible.__path__)}",
+            f"  ansible collection location = {':'.join(C.COLLECTIONS_PATHS)}",
+            f"  executable location = {sys.argv[0]}",
+        )
+    )
+    result.extend(
+        (
+            f"  python version = {''.join(sys.version.splitlines())} ({to_native(sys.executable)})",
+            f"  jinja version = {j2_version}",
+            f"  libyaml = {HAS_LIBYAML}",
+        )
+    )
     return "\n".join(result)
 
 
@@ -226,8 +232,14 @@ def add_verbosity_options(parser):
 
 def add_async_options(parser):
     """Add options for commands which can launch async tasks"""
-    parser.add_argument('-P', '--poll', default=C.DEFAULT_POLL_INTERVAL, type=int, dest='poll_interval',
-                        help="set the poll interval if using -B (default=%s)" % C.DEFAULT_POLL_INTERVAL)
+    parser.add_argument(
+        '-P',
+        '--poll',
+        default=C.DEFAULT_POLL_INTERVAL,
+        type=int,
+        dest='poll_interval',
+        help=f"set the poll interval if using -B (default={C.DEFAULT_POLL_INTERVAL})",
+    )
     parser.add_argument('-B', '--background', dest='seconds', type=int, default=0,
                         help='run asynchronously, failing after X seconds (default=N/A)')
 
@@ -255,10 +267,20 @@ def add_connect_options(parser):
 
     connect_group.add_argument('--private-key', '--key-file', default=C.DEFAULT_PRIVATE_KEY_FILE, dest='private_key_file',
                                help='use this file to authenticate the connection', type=unfrack_path())
-    connect_group.add_argument('-u', '--user', default=C.DEFAULT_REMOTE_USER, dest='remote_user',
-                               help='connect as this user (default=%s)' % C.DEFAULT_REMOTE_USER)
-    connect_group.add_argument('-c', '--connection', dest='connection', default=C.DEFAULT_TRANSPORT,
-                               help="connection type to use (default=%s)" % C.DEFAULT_TRANSPORT)
+    connect_group.add_argument(
+        '-u',
+        '--user',
+        default=C.DEFAULT_REMOTE_USER,
+        dest='remote_user',
+        help=f'connect as this user (default={C.DEFAULT_REMOTE_USER})',
+    )
+    connect_group.add_argument(
+        '-c',
+        '--connection',
+        dest='connection',
+        default=C.DEFAULT_TRANSPORT,
+        help=f"connection type to use (default={C.DEFAULT_TRANSPORT})",
+    )
     connect_group.add_argument('-T', '--timeout', default=None, type=int, dest='timeout',
                                help="override the connection timeout in seconds (default depends on connection)")
 
@@ -285,8 +307,14 @@ def add_connect_options(parser):
 
 def add_fork_options(parser):
     """Add options for commands that can fork worker processes"""
-    parser.add_argument('-f', '--forks', dest='forks', default=C.DEFAULT_FORKS, type=int,
-                        help="specify number of parallel processes to use (default=%s)" % C.DEFAULT_FORKS)
+    parser.add_argument(
+        '-f',
+        '--forks',
+        dest='forks',
+        default=C.DEFAULT_FORKS,
+        type=int,
+        help=f"specify number of parallel processes to use (default={C.DEFAULT_FORKS})",
+    )
 
 
 def add_inventory_options(parser):
@@ -310,9 +338,15 @@ def add_meta_options(parser):
 def add_module_options(parser):
     """Add options for commands that load modules"""
     module_path = C.config.get_configuration_definition('DEFAULT_MODULE_PATH').get('default', '')
-    parser.add_argument('-M', '--module-path', dest='module_path', default=None,
-                        help="prepend colon-separated path(s) to module library (default=%s)" % module_path,
-                        type=unfrack_path(pathsep=True), action=PrependListAction)
+    parser.add_argument(
+        '-M',
+        '--module-path',
+        dest='module_path',
+        default=None,
+        help=f"prepend colon-separated path(s) to module library (default={module_path})",
+        type=unfrack_path(pathsep=True),
+        action=PrependListAction,
+    )
 
 
 def add_output_options(parser):
@@ -335,11 +369,19 @@ def add_runas_options(parser):
     # consolidated privilege escalation (become)
     runas_group.add_argument("-b", "--become", default=C.DEFAULT_BECOME, action="store_true", dest='become',
                              help="run operations with become (does not imply password prompting)")
-    runas_group.add_argument('--become-method', dest='become_method', default=C.DEFAULT_BECOME_METHOD,
-                             help='privilege escalation method to use (default=%s)' % C.DEFAULT_BECOME_METHOD +
-                                  ', use `ansible-doc -t become -l` to list valid choices.')
-    runas_group.add_argument('--become-user', default=None, dest='become_user', type=str,
-                             help='run operations as this user (default=%s)' % C.DEFAULT_BECOME_USER)
+    runas_group.add_argument(
+        '--become-method',
+        dest='become_method',
+        default=C.DEFAULT_BECOME_METHOD,
+        help=f'privilege escalation method to use (default={C.DEFAULT_BECOME_METHOD}), use `ansible-doc -t become -l` to list valid choices.',
+    )
+    runas_group.add_argument(
+        '--become-user',
+        default=None,
+        dest='become_user',
+        type=str,
+        help=f'run operations as this user (default={C.DEFAULT_BECOME_USER})',
+    )
 
     parser.add_argument_group(runas_group)
 

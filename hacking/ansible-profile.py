@@ -8,7 +8,7 @@ import traceback
 from ansible.module_utils.common.text.converters import to_text
 
 target = sys.argv.pop(1)
-myclass = "%sCLI" % target.capitalize()
+myclass = f"{target.capitalize()}CLI"
 module_name = f'ansible.cli.{target}'
 
 try:
@@ -16,7 +16,7 @@ try:
     mycli = getattr(__import__(module_name, fromlist=[myclass]), myclass)
 except ImportError as e:
     if module_name in e.msg:
-        raise Exception("Ansible sub-program not implemented: %s" % target) from None
+        raise Exception(f"Ansible sub-program not implemented: {target}") from None
     else:
         raise
 

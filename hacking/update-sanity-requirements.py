@@ -108,18 +108,17 @@ def pre_build_instructions(requirements: str) -> str:
     )
 
     for package, specifier, constraints in build_constraints:
-        version_string = package_versions.get(package)
-
-        if version_string:
+        if version_string := package_versions.get(package):
             version = packaging.version.Version(version_string)
             specifier_set = packaging.specifiers.SpecifierSet(specifier)
 
             if specifier_set.contains(version):
                 instructions.append(f'# pre-build requirement: {package} == {version}\n')
 
-                for constraint in constraints:
-                    instructions.append(f'# pre-build constraint: {constraint}\n')
-
+                instructions.extend(
+                    f'# pre-build constraint: {constraint}\n'
+                    for constraint in constraints
+                )
     return ''.join(instructions)
 
 

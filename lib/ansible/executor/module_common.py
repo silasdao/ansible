@@ -521,24 +521,19 @@ class ModuleDepFinder(ast.NodeVisitor):
         # from ansible.executor import module_common
         # from ...executor import module_common
         # from ... import executor (Currently it gives a non-helpful error)
-        if node.level > 0:
+        if node.level > 0 and self.module_fqn:
+            parts = tuple(self.module_fqn.split('.'))
             # if we're in a package init, we have to add one to the node level (and make it none if 0 to preserve the right slicing behavior)
             level_slice_offset = -node.level + 1 or None if self.is_pkg_init else -node.level
-            if self.module_fqn:
-                parts = tuple(self.module_fqn.split('.'))
-                if node.module:
-                    # relative import: from .module import x
-                    node_module = '.'.join(parts[:level_slice_offset] + (node.module,))
-                else:
-                    # relative import: from . import x
-                    node_module = '.'.join(parts[:level_slice_offset])
+            if node.module:
+                # relative import: from .module import x
+                node_module = '.'.join(parts[:level_slice_offset] + (node.module,))
             else:
-                # fall back to an absolute import
-                node_module = node.module
+                # relative import: from . import x
+                node_module = '.'.join(parts[:level_slice_offset])
         else:
-            # absolute import: from module import x
+            # fall back to an absolute import
             node_module = node.module
-
         # Specialcase: six is a special case because of its
         # import logic
         py_mod = None
@@ -558,11 +553,6 @@ class ModuleDepFinder(ast.NodeVisitor):
                 # FIXME: Unhandled cornercase (needs to be ignored):
                 # from ansible_collections.ns.coll.plugins.[!module_utils].[FOO].plugins.module_utils import IDENTIFIER
                 py_mod = tuple(node_module.split('.'))
-            else:
-                # Not from module_utils so ignore.  for instance:
-                # from ansible_collections.ns.coll.plugins.lookup import IDENTIFIER
-                pass
-
         if py_mod:
             for alias in node.names:
                 self.submodules.add(py_mod + (alias.name,))
@@ -575,7 +565,9 @@ class ModuleDepFinder(ast.NodeVisitor):
 
 def _slurp(path):
     if not os.path.exists(path):
-        raise AnsibleError("imported module support code does not exist at %s" % os.path.abspath(path))
+        raise AnsibleError(
+            f"imported module support code does not exist at {os.path.abspath(path)}"
+        )
     with open(path, 'rb') as fd:
         data = fd.read()
     return data
@@ -590,9 +582,9 @@ def _get_shebang(interpreter, task_vars, templar, args=tuple(), remote_is_local=
     interpreter_name = os.path.basename(interpreter).strip()
 
     # name for interpreter var
-    interpreter_config = u'ansible_%s_interpreter' % interpreter_name
+    interpreter_config = f'ansible_{interpreter_name}_interpreter'
     # key for config
-    interpreter_config_key = "INTERPRETER_%s" % interpreter_name.upper()
+    interpreter_config_key = f"INTERPRETER_{interpreter_name.upper()}"
 
     interpreter_out = None
 
@@ -602,7 +594,6 @@ def _get_shebang(interpreter, task_vars, templar, args=tuple(), remote_is_local=
         if remote_is_local:
             interpreter_out = task_vars['ansible_playbook_python']
 
-        # a config def exists for this interpreter type; consult config for the value
         elif C.config.get_configuration_definition(interpreter_config_key):
 
             interpreter_from_config = C.config.get_config_value(interpreter_config_key, variables=task_vars)
@@ -611,7 +602,7 @@ def _get_shebang(interpreter, task_vars, templar, args=tuple(), remote_is_local=
             # handle interpreter discovery if requested or empty interpreter was provided
             if not interpreter_out or interpreter_out in ['auto', 'auto_legacy', 'auto_silent', 'auto_legacy_silent']:
 
-                discovered_interpreter_config = u'discovered_interpreter_%s' % interpreter_name
+                discovered_interpreter_config = f'discovered_interpreter_{interpreter_name}'
                 facts_from_task_vars = task_vars.get('ansible_facts', {})
 
                 if discovered_interpreter_config not in facts_from_task_vars:
@@ -633,7 +624,7 @@ def _get_shebang(interpreter, task_vars, templar, args=tuple(), remote_is_local=
     # set shebang
     shebang = u'#!{0}'.format(interpreter_out)
     if args:
-        shebang = shebang + u' ' + u' '.join(args)
+        shebang = f'{shebang} ' + u' '.join(args)
 
     return shebang, interpreter_out
 
@@ -694,12 +685,9 @@ class ModuleUtilLocatorBase:
             removal_version = dep_or_ts.get('removal_version')
             warning_text = dep_or_ts.get('warning_text')
 
-            msg = 'module_util {0} has been removed'.format('.'.join(name_parts))
-            if warning_text:
-                msg += ' ({0})'.format(warning_text)
-            else:
-                msg += '.'
-
+            msg = 'module_util {0} has been removed'.format(
+                '.'.join(name_parts)
+            ) + (' ({0})'.format(warning_text) if warning_text else '.')
             display.deprecated(msg, removal_version, removed, removal_date, self._collection_name)
         if 'redirect' in routing_entry:
             self.redirected = True
@@ -746,18 +734,17 @@ class ModuleUtilLocatorBase:
                 break
 
         else:  # didn't find what we were looking for- last chance for packages whose parents were redirected
-            if self._child_is_redirected:  # make fake packages
-                self.is_package = True
-                self.source_code = ''
-            else:  # nope, just bail
+            if not self._child_is_redirected:
                 return
 
+            self.is_package = True
+            self.source_code = ''
         if self.is_package:
             path_parts = candidate_name_parts + ('__init__',)
         else:
             path_parts = candidate_name_parts
         self.found = True
-        self.output_path = os.path.join(*path_parts) + '.py'
+        self.output_path = f'{os.path.join(*path_parts)}.py'
         self.fq_name_parts = candidate_name_parts
 
     def _generate_redirect_shim_source(self, fq_source_module, fq_target_module):
@@ -775,7 +762,7 @@ class LegacyModuleUtilLocator(ModuleUtilLocatorBase):
     def __init__(self, fq_name_parts, is_ambiguous=False, mu_paths=None, child_is_redirected=False):
         super(LegacyModuleUtilLocator, self).__init__(fq_name_parts, is_ambiguous, child_is_redirected)
 
-        if fq_name_parts[0:2] != ('ansible', 'module_utils'):
+        if fq_name_parts[:2] != ('ansible', 'module_utils'):
             raise Exception('this class can only locate from ansible.module_utils, got {0}'.format(fq_name_parts))
 
         if fq_name_parts[2] == 'six':
@@ -803,11 +790,14 @@ class LegacyModuleUtilLocator(ModuleUtilLocatorBase):
 
         # find_spec needs the full module name
         self._info = info = importlib.machinery.PathFinder.find_spec('.'.join(name_parts), paths)
-        if info is not None and os.path.splitext(info.origin)[1] in importlib.machinery.SOURCE_SUFFIXES:
-            self.is_package = info.origin.endswith('/__init__.py')
-            path = info.origin
-        else:
+        if (
+            info is None
+            or os.path.splitext(info.origin)[1]
+            not in importlib.machinery.SOURCE_SUFFIXES
+        ):
             return False
+        self.is_package = info.origin.endswith('/__init__.py')
+        path = info.origin
         self.source_code = _slurp(path)
 
         return True
@@ -839,7 +829,7 @@ class CollectionModuleUtilLocator(ModuleUtilLocatorBase):
         # the controller while analyzing/assembling the module, so we'll have to manually import the collection's
         # Python package to locate it (import root collection, reassemble resource path beneath, fetch source)
 
-        collection_pkg_name = '.'.join(name_parts[0:3])
+        collection_pkg_name = '.'.join(name_parts[:3])
         resource_base_path = os.path.join(*name_parts[3:])
 
         src = None
@@ -855,7 +845,9 @@ class CollectionModuleUtilLocator(ModuleUtilLocatorBase):
             self.is_package = True
         else:
             try:
-                src = pkgutil.get_data(collection_pkg_name, to_native(resource_base_path + '.py'))
+                src = pkgutil.get_data(
+                    collection_pkg_name, to_native(f'{resource_base_path}.py')
+                )
             except ImportError:
                 pass
 
@@ -916,8 +908,8 @@ def recursive_finder(name, module_fqn, module_data, zf, date_time=None):
     # Parse the module code and find the imports of ansible.module_utils
     try:
         tree = compile(module_data, '<unknown>', 'exec', ast.PyCF_ONLY_AST)
-    except (SyntaxError, IndentationError) as e:
-        raise AnsibleError("Unable to import %s due to %s" % (name, e.msg))
+    except SyntaxError as e:
+        raise AnsibleError(f"Unable to import {name} due to {e.msg}")
 
     finder = ModuleDepFinder(module_fqn, tree)
 
@@ -937,7 +929,7 @@ def recursive_finder(name, module_fqn, module_data, zf, date_time=None):
             # this is normal; we'll often see the same module imported many times, but we only need to process it once
             continue
 
-        if py_module_name[0:2] == ('ansible', 'module_utils'):
+        if py_module_name[:2] == ('ansible', 'module_utils'):
             module_info = LegacyModuleUtilLocator(py_module_name, is_ambiguous=is_ambiguous,
                                                   mu_paths=module_utils_paths, child_is_redirected=child_is_redirected)
         elif py_module_name[0] == 'ansible_collections':
@@ -945,8 +937,9 @@ def recursive_finder(name, module_fqn, module_data, zf, date_time=None):
                                                       child_is_redirected=child_is_redirected, is_optional=is_optional)
         else:
             # FIXME: dot-joined result
-            display.warning('ModuleDepFinder improperly found a non-module_utils import %s'
-                            % [py_module_name])
+            display.warning(
+                f'ModuleDepFinder improperly found a non-module_utils import {[py_module_name]}'
+            )
             continue
 
         # Could not find the module.  Construct a helpful error message.
@@ -966,8 +959,10 @@ def recursive_finder(name, module_fqn, module_data, zf, date_time=None):
         # compile the source, process all relevant imported modules
         try:
             tree = compile(module_info.source_code, '<unknown>', 'exec', ast.PyCF_ONLY_AST)
-        except (SyntaxError, IndentationError) as e:
-            raise AnsibleError("Unable to import %s due to %s" % (module_info.fq_name_parts, e.msg))
+        except SyntaxError as e:
+            raise AnsibleError(
+                f"Unable to import {module_info.fq_name_parts} due to {e.msg}"
+            )
 
         finder = ModuleDepFinder('.'.join(module_info.fq_name_parts), tree, module_info.is_package)
         modules_to_process.extend(ModuleUtilsProcessEntry(m, True, False, is_optional=m in finder.optional_imports)
@@ -984,19 +979,18 @@ def recursive_finder(name, module_fqn, module_data, zf, date_time=None):
             if normalized_name not in py_module_cache:
                 modules_to_process.append(ModuleUtilsProcessEntry(normalized_name, False, module_info.redirected, is_optional=is_optional))
 
-    for py_module_name in py_module_cache:
+    for py_module_name, value in py_module_cache.items():
         py_module_file_name = py_module_cache[py_module_name][1]
 
-        zf.writestr(
-            _make_zinfo(py_module_file_name, date_time, zf=zf),
-            py_module_cache[py_module_name][0]
-        )
+        zf.writestr(_make_zinfo(py_module_file_name, date_time, zf=zf), value[0])
         mu_file = to_text(py_module_file_name, errors='surrogate_or_strict')
-        display.vvvvv("Including module_utils file %s" % mu_file)
+        display.vvvvv(f"Including module_utils file {mu_file}")
 
 
 def _is_binary(b_module_data):
-    textchars = bytearray(set([7, 8, 9, 10, 12, 13, 27]) | set(range(0x20, 0x100)) - set([0x7f]))
+    textchars = bytearray(
+        {7, 8, 9, 10, 12, 13, 27} | set(range(0x20, 0x100)) - {0x7F}
+    )
     start = b_module_data[:1024]
     return bool(start.translate(None, textchars))
 
@@ -1018,20 +1012,17 @@ def _get_ansible_module_fqn(module_path):
         # Is this a module in a collection?
         match = COLLECTION_PATH_RE.search(module_path)
 
-    # We can tell the FQN for core modules and collection modules
-    if match:
-        path = match.group('path')
-        if '.' in path:
-            # FQNs must be valid as python identifiers.  This sanity check has failed.
-            # we could check other things as well
-            raise ValueError('Module name (or path) was not a valid python identifier')
-
-        remote_module_fqn = '.'.join(path.split('/'))
-    else:
+    if not match:
         # Currently we do not handle modules in roles so we can end up here for that reason
         raise ValueError("Unable to determine module's fully qualified name")
 
-    return remote_module_fqn
+    path = match.group('path')
+    if '.' in path:
+        # FQNs must be valid as python identifiers.  This sanity check has failed.
+        # we could check other things as well
+        raise ValueError('Module name (or path) was not a valid python identifier')
+
+    return '.'.join(path.split('/'))
 
 
 def _add_module_to_zip(zf, date_time, remote_module_fqn, b_module_data):

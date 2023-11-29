@@ -30,11 +30,15 @@ def check_blocking_io():
             continue  # not a real file handle, such as during the import sanity test
 
         if not os.get_blocking(fd):
-            handles.append(getattr(handle, 'name', None) or '#%s' % fd)
+            handles.append(getattr(handle, 'name', None) or f'#{fd}')
 
     if handles:
-        raise SystemExit('ERROR: Ansible requires blocking IO on stdin/stdout/stderr. '
-                         'Non-blocking file handles detected: %s' % ', '.join(_io for _io in handles))
+        raise SystemExit(
+            (
+                'ERROR: Ansible requires blocking IO on stdin/stdout/stderr. '
+                'Non-blocking file handles detected: %s' % ', '.join(handles)
+            )
+        )
 
 
 check_blocking_io()
@@ -49,15 +53,19 @@ def initialize_locale():
         dummy, encoding = locale.getlocale()
     except (locale.Error, ValueError) as e:
         raise SystemExit(
-            'ERROR: Ansible could not initialize the preferred locale: %s' % e
+            f'ERROR: Ansible could not initialize the preferred locale: {e}'
         )
 
     if not encoding or encoding.lower() not in ('utf-8', 'utf8'):
-        raise SystemExit('ERROR: Ansible requires the locale encoding to be UTF-8; Detected %s.' % encoding)
+        raise SystemExit(
+            f'ERROR: Ansible requires the locale encoding to be UTF-8; Detected {encoding}.'
+        )
 
     fs_enc = sys.getfilesystemencoding()
     if fs_enc.lower() != 'utf-8':
-        raise SystemExit('ERROR: Ansible requires the filesystem encoding to be UTF-8; Detected %s.' % fs_enc)
+        raise SystemExit(
+            f'ERROR: Ansible requires the filesystem encoding to be UTF-8; Detected {fs_enc}.'
+        )
 
 
 initialize_locale()
@@ -87,7 +95,7 @@ try:
     from ansible.utils.display import Display
     display = Display()
 except Exception as e:
-    print('ERROR: %s' % e, file=sys.stderr)
+    print(f'ERROR: {e}', file=sys.stderr)
     sys.exit(5)
 
 from ansible import context
@@ -163,7 +171,7 @@ class CLI(ABC):
         display.vv(to_text(opt_help.version(self.parser.prog)))
 
         if C.CONFIG_FILE:
-            display.v(u"Using %s as config file" % to_text(C.CONFIG_FILE))
+            display.v(f"Using {to_text(C.CONFIG_FILE)} as config file")
         else:
             display.v(u"No config file found; using defaults")
 
@@ -172,14 +180,18 @@ class CLI(ABC):
             name = deprecated[0]
             why = deprecated[1]['why']
             if 'alternatives' in deprecated[1]:
-                alt = ', use %s instead' % deprecated[1]['alternatives']
+                alt = f", use {deprecated[1]['alternatives']} instead"
             else:
                 alt = ''
             ver = deprecated[1].get('version')
             date = deprecated[1].get('date')
             collection_name = deprecated[1].get('collection_name')
-            display.deprecated("%s option, %s%s" % (name, why, alt),
-                               version=ver, date=date, collection_name=collection_name)
+            display.deprecated(
+                f"{name} option, {why}{alt}",
+                version=ver,
+                date=date,
+                collection_name=collection_name,
+            )
 
     @staticmethod
     def split_vault_id(vault_id):
@@ -189,8 +201,7 @@ class CLI(ABC):
             return (None, vault_id)
 
         parts = vault_id.split('@', 1)
-        ret = tuple(parts)
-        return ret
+        return tuple(parts)
 
     @staticmethod
     def build_vault_ids(vault_ids, vault_password_files=None,
@@ -201,7 +212,7 @@ class CLI(ABC):
 
         # convert vault_password_files into vault_ids slugs
         for password_file in vault_password_files:
-            id_slug = u'%s@%s' % (C.DEFAULT_VAULT_IDENTITY, password_file)
+            id_slug = f'{C.DEFAULT_VAULT_IDENTITY}@{password_file}'
 
             # note this makes --vault-id higher precedence than --vault-password-file
             # if we want to intertwingle them in order probably need a cli callback to populate vault_ids
@@ -213,7 +224,7 @@ class CLI(ABC):
         # prompts cant/shouldnt work without a tty, so dont add prompt secrets
         if ask_vault_pass or (not vault_ids and auto_prompt):
 
-            id_slug = u'%s@%s' % (C.DEFAULT_VAULT_IDENTITY, u'prompt_ask_vault_pass')
+            id_slug = f'{C.DEFAULT_VAULT_IDENTITY}@prompt_ask_vault_pass'
             vault_ids.append(id_slug)
 
         return vault_ids
@@ -276,7 +287,7 @@ class CLI(ABC):
                 try:
                     prompted_vault_secret.load()
                 except AnsibleError as exc:
-                    display.warning('Error in vault password prompt (%s): %s' % (vault_id_name, exc))
+                    display.warning(f'Error in vault password prompt ({vault_id_name}): {exc}')
                     raise
 
                 found_vault_secret = True
@@ -288,21 +299,25 @@ class CLI(ABC):
                 continue
 
             # assuming anything else is a password file
-            display.vvvvv('Reading vault password file: %s' % vault_id_value)
+            display.vvvvv(f'Reading vault password file: {vault_id_value}')
             # read vault_pass from a file
             try:
                 file_vault_secret = get_file_vault_secret(filename=vault_id_value,
                                                           vault_id=vault_id_name,
                                                           loader=loader)
             except AnsibleError as exc:
-                display.warning('Error getting vault password file (%s): %s' % (vault_id_name, to_text(exc)))
+                display.warning(
+                    f'Error getting vault password file ({vault_id_name}): {to_text(exc)}'
+                )
                 last_exception = exc
                 continue
 
             try:
                 file_vault_secret.load()
             except AnsibleError as exc:
-                display.warning('Error in vault password file loading (%s): %s' % (vault_id_name, to_text(exc)))
+                display.warning(
+                    f'Error in vault password file loading ({vault_id_name}): {to_text(exc)}'
+                )
                 last_exception = exc
                 continue
 
@@ -342,10 +357,10 @@ class CLI(ABC):
         become_prompt_method = "BECOME" if C.AGNOSTIC_BECOME_PROMPT else op['become_method'].upper()
 
         try:
-            become_prompt = "%s password: " % become_prompt_method
+            become_prompt = f"{become_prompt_method} password: "
             if op['ask_pass']:
                 sshpass = CLI._get_secret("SSH password: ")
-                become_prompt = "%s password[defaults to SSH password]: " % become_prompt_method
+                become_prompt = f"{become_prompt_method} password[defaults to SSH password]: "
             elif op['connection_password_file']:
                 sshpass = CLI.get_password_from_file(op['connection_password_file'])
 
@@ -471,11 +486,7 @@ class CLI(ABC):
     @staticmethod
     def version_info(gitinfo=False):
         ''' return full ansible version info '''
-        if gitinfo:
-            # expensive call, user with care
-            ansible_version_string = opt_help.version()
-        else:
-            ansible_version_string = __version__
+        ansible_version_string = opt_help.version() if gitinfo else __version__
         ansible_version = ansible_version_string.split()[0]
         ansible_versions = ansible_version.split('.')
         for counter in range(len(ansible_versions)):
@@ -486,7 +497,7 @@ class CLI(ABC):
             except Exception:
                 pass
         if len(ansible_versions) < 3:
-            for counter in range(len(ansible_versions), 3):
+            for _ in range(len(ansible_versions), 3):
                 ansible_versions.append(0)
         return {'string': ansible_version_string.strip(),
                 'full': ansible_version,
@@ -537,13 +548,11 @@ class CLI(ABC):
         # all needs loader
         loader = DataLoader()
 
-        basedir = options.get('basedir', False)
-        if basedir:
+        if basedir := options.get('basedir', False):
             loader.set_basedir(basedir)
             add_all_plugin_dirs(basedir)
             AnsibleCollectionConfig.playbook_paths = basedir
-            default_collection = _get_collection_name_from_path(basedir)
-            if default_collection:
+            if default_collection := _get_collection_name_from_path(basedir):
                 display.warning(u'running with default collection {0}'.format(default_collection))
                 AnsibleCollectionConfig.default_collection = default_collection
 
@@ -579,11 +588,12 @@ class CLI(ABC):
 
         inventory.subset(subset)
 
-        hosts = inventory.list_hosts(pattern)
-        if not hosts and no_hosts is False:
+        if hosts := inventory.list_hosts(pattern):
+            return hosts
+        elif no_hosts:
+            return hosts
+        else:
             raise AnsibleError("Specified inventory, host pattern and/or --limit leaves us with no hosts to target.")
-
-        return hosts
 
     @staticmethod
     def get_password_from_file(pwd_file):
@@ -595,37 +605,37 @@ class CLI(ABC):
             secret = sys.stdin.buffer.read()
 
         elif not os.path.exists(b_pwd_file):
-            raise AnsibleError("The password file %s was not found" % pwd_file)
+            raise AnsibleError(f"The password file {pwd_file} was not found")
 
         elif is_executable(b_pwd_file):
-            display.vvvv(u'The password file %s is a script.' % to_text(pwd_file))
+            display.vvvv(f'The password file {to_text(pwd_file)} is a script.')
             cmd = [b_pwd_file]
 
             try:
                 p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
             except OSError as e:
-                raise AnsibleError("Problem occured when trying to run the password script %s (%s)."
-                                   " If this is not a script, remove the executable bit from the file." % (pwd_file, e))
+                raise AnsibleError(
+                    f"Problem occured when trying to run the password script {pwd_file} ({e}). If this is not a script, remove the executable bit from the file."
+                )
 
             stdout, stderr = p.communicate()
             if p.returncode != 0:
-                raise AnsibleError("The password script %s returned an error (rc=%s): %s" % (pwd_file, p.returncode, stderr))
+                raise AnsibleError(
+                    f"The password script {pwd_file} returned an error (rc={p.returncode}): {stderr}"
+                )
             secret = stdout
 
         else:
             try:
-                f = open(b_pwd_file, "rb")
-                secret = f.read().strip()
-                f.close()
+                with open(b_pwd_file, "rb") as f:
+                    secret = f.read().strip()
             except (OSError, IOError) as e:
-                raise AnsibleError("Could not read password file %s: %s" % (pwd_file, e))
+                raise AnsibleError(f"Could not read password file {pwd_file}: {e}")
 
-        secret = secret.strip(b'\r\n')
-
-        if not secret:
-            raise AnsibleError('Empty password was provided from file (%s)' % pwd_file)
-
-        return to_unsafe_text(secret)
+        if secret := secret.strip(b'\r\n'):
+            return to_unsafe_text(secret)
+        else:
+            raise AnsibleError(f'Empty password was provided from file ({pwd_file})')
 
     @classmethod
     def cli_executor(cls, args=None):
@@ -644,7 +654,7 @@ class CLI(ABC):
                         "Failed to create the directory '%s': %s" % (ansible_dir, to_text(exc, errors='surrogate_or_replace'))
                     )
             else:
-                display.debug("Created the '%s' directory" % ansible_dir)
+                display.debug(f"Created the '{ansible_dir}' directory")
 
             try:
                 args = [to_text(a, errors='surrogate_or_strict') for a in args]
@@ -663,13 +673,6 @@ class CLI(ABC):
         except AnsibleParserError as e:
             display.error(to_text(e), wrap_text=False)
             exit_code = 4
-    # TQM takes care of these, but leaving comment to reserve the exit codes
-    #    except AnsibleHostUnreachable as e:
-    #        display.error(str(e))
-    #        exit_code = 3
-    #    except AnsibleHostFailed as e:
-    #        display.error(str(e))
-    #        exit_code = 2
         except AnsibleError as e:
             display.error(to_text(e), wrap_text=False)
             exit_code = 1
@@ -682,8 +685,11 @@ class CLI(ABC):
                 # enter post mortem mode.
                 raise
             have_cli_options = bool(context.CLIARGS)
-            display.error("Unexpected Exception, this is probably a bug: %s" % to_text(e), wrap_text=False)
-            if not have_cli_options or have_cli_options and context.CLIARGS['verbosity'] > 2:
+            display.error(
+                f"Unexpected Exception, this is probably a bug: {to_text(e)}",
+                wrap_text=False,
+            )
+            if not have_cli_options or context.CLIARGS['verbosity'] > 2:
                 log_only = False
                 if hasattr(e, 'orig_exc'):
                     display.vvv('\nexception type: %s' % to_text(type(e.orig_exc)))

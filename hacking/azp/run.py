@@ -72,15 +72,13 @@ def parse_args():
     if argcomplete:
         argcomplete.autocomplete(parser)
 
-    args = parser.parse_args()
-
-    return args
+    return parser.parse_args()
 
 
 def start_run(args, key):
     """Start a new CI run."""
 
-    url = "https://dev.azure.com/ansible/ansible/_apis/pipelines/%s/runs?api-version=6.0-preview.1" % args.pipeline_id
+    url = f"https://dev.azure.com/ansible/ansible/_apis/pipelines/{args.pipeline_id}/runs?api-version=6.0-preview.1"
     payload = {"resources": {"repositories": {"self": {"refName": args.ref}}}}
 
     resp = requests.post(url, auth=requests.auth.HTTPBasicAuth('user', key), data=payload)

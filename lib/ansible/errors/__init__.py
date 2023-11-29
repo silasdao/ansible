@@ -73,7 +73,7 @@ class AnsibleError(Exception):
                     '\n\n%s' % to_native(extended_error)
                 )
         elif self.orig_exc:
-            message.append('. %s' % to_native(self.orig_exc))
+            message.append(f'. {to_native(self.orig_exc)}')
 
         return ''.join(message)
 
@@ -163,17 +163,14 @@ class AnsibleError(Exception):
                     # check for unquoted vars starting lines
                     if ('{{' in target_line and '}}' in target_line) and ('"{{' not in target_line or "'{{" not in target_line):
                         error_message += YAML_COMMON_UNQUOTED_VARIABLE_ERROR
-                    # check for common dictionary mistakes
                     elif ":{{" in stripped_line and "}}" in stripped_line:
                         error_message += YAML_COMMON_DICT_ERROR
-                    # check for common unquoted colon mistakes
                     elif (len(target_line) and
                             len(target_line) > 1 and
                             len(target_line) > col_number and
                             target_line[col_number] == ":" and
                             target_line.count(':') > 1):
                         error_message += YAML_COMMON_UNQUOTED_COLON_ERROR
-                    # otherwise, check for some common quoting mistakes
                     else:
                         # FIXME: This needs to split on the first ':' to account for modules like lineinfile
                         # that may have lines that contain legitimate colons, e.g., line: 'i ALL= (ALL) NOPASSWD: ALL'
@@ -182,20 +179,18 @@ class AnsibleError(Exception):
                         if len(parts) > 1:
                             middle = parts[1].strip()
                             match = False
-                            unbalanced = False
-
                             if middle.startswith("'") and not middle.endswith("'"):
                                 match = True
                             elif middle.startswith('"') and not middle.endswith('"'):
                                 match = True
 
-                            if (len(middle) > 0 and
-                                    middle[0] in ['"', "'"] and
-                                    middle[-1] in ['"', "'"] and
-                                    target_line.count("'") > 2 or
-                                    target_line.count('"') > 2):
-                                unbalanced = True
-
+                            unbalanced = (
+                                len(middle) > 0
+                                and middle[0] in ['"', "'"]
+                                and middle[-1] in ['"', "'"]
+                                and target_line.count("'") > 2
+                                or target_line.count('"') > 2
+                            )
                             if match:
                                 error_message += YAML_COMMON_PARTIALLY_QUOTED_LINE_ERROR
                             if unbalanced:
@@ -293,7 +288,7 @@ class AnsibleFileNotFound(AnsibleRuntimeError):
         if message:
             message += "\n"
         if self.file_name:
-            message += "Could not find or access '%s'" % to_text(self.file_name)
+            message += f"Could not find or access '{to_text(self.file_name)}'"
         else:
             message += "Could not find file"
 
@@ -319,10 +314,7 @@ class AnsibleAction(AnsibleRuntimeError):
 
         super(AnsibleAction, self).__init__(message=message, obj=obj, show_content=show_content,
                                             suppress_extended_error=suppress_extended_error, orig_exc=orig_exc)
-        if result is None:
-            self.result = {}
-        else:
-            self.result = result
+        self.result = {} if result is None else result
 
 
 class AnsibleActionSkip(AnsibleAction):

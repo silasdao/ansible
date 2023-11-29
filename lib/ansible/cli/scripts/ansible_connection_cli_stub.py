@@ -86,11 +86,11 @@ class ConnectionProcess(object):
         self._ansible_playbook_pid = ansible_playbook_pid
 
     def start(self, options):
-        messages = list()
+        messages = []
         result = {}
 
         try:
-            messages.append(('vvvv', 'control socket path is %s' % self.socket_path))
+            messages.append(('vvvv', f'control socket path is {self.socket_path}'))
 
             # If this is a relative path (~ gets expanded later) then plug the
             # key's path on to the directory we originally came from, so we can
@@ -140,7 +140,7 @@ class ConnectionProcess(object):
                         break
 
                     if log_messages:
-                        display.display("jsonrpc request: %s" % data, log_only=True)
+                        display.display(f"jsonrpc request: {data}", log_only=True)
 
                     request = json.loads(to_text(data, errors='surrogate_or_strict'))
                     if request.get('method') == "exec_command" and not self.connection.connected:
@@ -152,7 +152,7 @@ class ConnectionProcess(object):
                     signal.alarm(0)
 
                     if log_messages:
-                        display.display("jsonrpc response: %s" % resp, log_only=True)
+                        display.display(f"jsonrpc response: {resp}", log_only=True)
 
                     send_data(s, to_bytes(resp))
 
@@ -160,12 +160,12 @@ class ConnectionProcess(object):
 
         except Exception as e:
             # socket.accept() will raise EINTR if the socket.close() is called
-            if hasattr(e, 'errno'):
-                if e.errno != errno.EINTR:
-                    self.exception = traceback.format_exc()
-            else:
+            if (
+                hasattr(e, 'errno')
+                and e.errno != errno.EINTR
+                or not hasattr(e, 'errno')
+            ):
                 self.exception = traceback.format_exc()
-
         finally:
             # allow time for any exception msg send over socket to receive at other end before shutting down
             time.sleep(0.1)
@@ -186,7 +186,7 @@ class ConnectionProcess(object):
         raise Exception(msg)
 
     def handler(self, signum, frame):
-        msg = 'signal handler called with signal %s.' % signum
+        msg = f'signal handler called with signal {signum}.'
         display.display(msg, log_only=True)
         raise Exception(msg)
 
@@ -233,7 +233,7 @@ def main(args=None):
 
     rc = 0
     result = {}
-    messages = list()
+    messages = []
     socket_path = None
 
     # Need stdin as a byte stream
@@ -320,9 +320,10 @@ def main(args=None):
                 except Exception as exc:
                     # Only network_cli has update_play context and set_check_prompt, so missing this is
                     # not fatal e.g. netconf
-                    if isinstance(exc, ConnectionError) and getattr(exc, 'code', None) == -32601:
-                        pass
-                    else:
+                    if (
+                        not isinstance(exc, ConnectionError)
+                        or getattr(exc, 'code', None) != -32601
+                    ):
                         result.update({
                             'error': to_text(exc),
                             'exception': traceback.format_exc()

@@ -132,7 +132,9 @@ class VaultCLI(CLI):
         if options.vault_ids:
             for vault_id in options.vault_ids:
                 if u';' in vault_id:
-                    raise AnsibleOptionsError("'%s' is not a valid vault id. The character ';' is not allowed in vault ids" % vault_id)
+                    raise AnsibleOptionsError(
+                        f"'{vault_id}' is not a valid vault id. The character ';' is not allowed in vault ids"
+                    )
 
         if getattr(options, 'output_file', None) and len(options.args) > 1:
             raise AnsibleOptionsError("At most one input file may be used with the --output option")
@@ -184,15 +186,16 @@ class VaultCLI(CLI):
 
             vault_secrets = None
             vault_secrets = \
-                self.setup_vault_secrets(loader,
+                    self.setup_vault_secrets(loader,
                                          vault_ids=vault_ids,
                                          vault_password_files=list(context.CLIARGS['vault_password_files']),
                                          ask_vault_pass=context.CLIARGS['ask_vault_pass'],
                                          create_new_password=True)
 
             if len(vault_secrets) > 1 and not encrypt_vault_id:
-                raise AnsibleOptionsError("The vault-ids %s are available to encrypt. Specify the vault-id to encrypt with --encrypt-vault-id" %
-                                          ','.join([x[0] for x in vault_secrets]))
+                raise AnsibleOptionsError(
+                    f"The vault-ids {','.join([x[0] for x in vault_secrets])} are available to encrypt. Specify the vault-id to encrypt with --encrypt-vault-id"
+                )
 
             if not vault_secrets:
                 raise AnsibleOptionsError("A vault password is required to use Ansible's Vault")
@@ -207,14 +210,7 @@ class VaultCLI(CLI):
 
         if action in ['rekey']:
             encrypt_vault_id = context.CLIARGS['encrypt_vault_id'] or C.DEFAULT_VAULT_ENCRYPT_IDENTITY
-            # print('encrypt_vault_id: %s' % encrypt_vault_id)
-            # print('default_encrypt_vault_id: %s' % default_encrypt_vault_id)
-
-            # new_vault_ids should only ever be one item, from
-            # load the default vault ids if we are using encrypt-vault-id
-            new_vault_ids = []
-            if encrypt_vault_id:
-                new_vault_ids = default_vault_ids
+            new_vault_ids = default_vault_ids if encrypt_vault_id else []
             if context.CLIARGS['new_vault_id']:
                 new_vault_ids.append(context.CLIARGS['new_vault_id'])
 
@@ -223,7 +219,7 @@ class VaultCLI(CLI):
                 new_vault_password_files.append(context.CLIARGS['new_vault_password_file'])
 
             new_vault_secrets = \
-                self.setup_vault_secrets(loader,
+                    self.setup_vault_secrets(loader,
                                          vault_ids=new_vault_ids,
                                          vault_password_files=new_vault_password_files,
                                          ask_vault_pass=context.CLIARGS['ask_vault_pass'],
@@ -270,25 +266,16 @@ class VaultCLI(CLI):
     def format_ciphertext_yaml(b_ciphertext, indent=None, name=None):
         indent = indent or 10
 
-        block_format_var_name = ""
-        if name:
-            block_format_var_name = "%s: " % name
-
-        block_format_header = "%s!vault |" % block_format_var_name
-        lines = []
+        block_format_var_name = f"{name}: " if name else ""
+        block_format_header = f"{block_format_var_name}!vault |"
         vault_ciphertext = to_text(b_ciphertext)
 
-        lines.append(block_format_header)
-        for line in vault_ciphertext.splitlines():
-            lines.append('%s%s' % (' ' * indent, line))
-
-        yaml_ciphertext = '\n'.join(lines)
-        return yaml_ciphertext
+        lines = [block_format_header]
+        lines.extend(f"{' ' * indent}{line}" for line in vault_ciphertext.splitlines())
+        return '\n'.join(lines)
 
     def execute_encrypt_string(self):
         ''' encrypt the supplied string using the provided vault secret '''
-        b_plaintext = None
-
         # Holds tuples (the_text, the_source_of_the_string, the variable name if its provided).
         b_plaintext_list = []
 
@@ -296,6 +283,7 @@ class VaultCLI(CLI):
         # we don't add it to the plaintext list
         args = [x for x in context.CLIARGS['args'] if x != '-']
 
+        b_plaintext = None
         # We can prompt and read input, or read from stdin, but not both.
         if context.CLIARGS['encrypt_string_prompt']:
             msg = "String to encrypt: "
@@ -310,11 +298,7 @@ class VaultCLI(CLI):
             # TODO: could prompt for which vault_id to use for each plaintext string
             #       currently, it will just be the default
             hide_input = not context.CLIARGS['show_string_input']
-            if hide_input:
-                msg = "String to encrypt (hidden): "
-            else:
-                msg = "String to encrypt:"
-
+            msg = "String to encrypt (hidden): " if hide_input else "String to encrypt:"
             prompt_response = display.prompt(msg, private=hide_input)
 
             if prompt_response == '':
@@ -351,15 +335,15 @@ class VaultCLI(CLI):
                 # Trying to avoid ever showing the plaintext in the output, so this warning is vague to avoid that.
                 display.display('The number of --name options do not match the number of args.',
                                 stderr=True)
-                display.display('The last named variable will be "%s". The rest will not have'
-                                ' names.' % context.CLIARGS['encrypt_string_names'][-1],
-                                stderr=True)
+                display.display(
+                    f"""The last named variable will be "{context.CLIARGS['encrypt_string_names'][-1]}". The rest will not have names.""",
+                    stderr=True,
+                )
 
             # Add the rest of the args without specifying a name
-            for extra_arg in args[len(name_and_text_list):]:
-                name_and_text_list.append((None, extra_arg))
-
-        # if no --names are provided, just use the args without a name.
+            name_and_text_list.extend(
+                (None, extra_arg) for extra_arg in args[len(name_and_text_list) :]
+            )
         else:
             name_and_text_list = [(None, x) for x in args]
 
@@ -398,12 +382,7 @@ class VaultCLI(CLI):
         # TODO: offer block or string ala eyaml
 
     def _format_output_vault_strings(self, b_plaintext_list, vault_id=None):
-        # If we are only showing one item in the output, we don't need to included commented
-        # delimiters in the text
-        show_delimiter = False
-        if len(b_plaintext_list) > 1:
-            show_delimiter = True
-
+        show_delimiter = len(b_plaintext_list) > 1
         # list of dicts {'out': '', 'err': ''}
         output = []
 

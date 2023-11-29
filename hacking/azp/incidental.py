@@ -102,21 +102,16 @@ def parse_args():
     if argcomplete:
         argcomplete.autocomplete(parser)
 
-    args = parser.parse_args()
-
-    return args
+    return parser.parse_args()
 
 
 def optional_directory(value):
-    if not os.path.exists(value):
-        return value
-
-    return directory(value)
+    return value if not os.path.exists(value) else directory(value)
 
 
 def directory(value):
     if not os.path.isdir(value):
-        raise argparse.ArgumentTypeError('"%s" is not a directory' % value)
+        raise argparse.ArgumentTypeError(f'"{value}" is not a directory')
 
     return value
 
@@ -125,7 +120,7 @@ def regex(value):
     try:
         return re.compile(value)
     except Exception as ex:
-        raise argparse.ArgumentTypeError('"%s" is not a valid regex: %s' % (value, ex))
+        raise argparse.ArgumentTypeError(f'"{value}" is not a valid regex: {ex}')
 
 
 def incidental_report(args):
@@ -172,8 +167,10 @@ def incidental_report(args):
     if args.plugin_path:
         # reporting on coverage missing from the test target for the specified plugin
         # the report will be on a single target
-        cache_path_format = '%s' + '-for-%s' % os.path.splitext(os.path.basename(args.plugin_path))[0]
-        target_pattern = '^%s$' % get_target_name_from_plugin_path(args.plugin_path)
+        cache_path_format = (
+            f'%s-for-{os.path.splitext(os.path.basename(args.plugin_path))[0]}'
+        )
+        target_pattern = f'^{get_target_name_from_plugin_path(args.plugin_path)}$'
         include_path = args.plugin_path
         missing = True
         target_name = get_target_name_from_plugin_path(args.plugin_path)
@@ -209,30 +206,37 @@ def incidental_report(args):
     for target_name in incidental_target_names:
         cache_name = cache_path_format % target_name
 
-        only_target_path = os.path.join(data_path, 'only-%s.json' % cache_name)
+        only_target_path = os.path.join(data_path, f'only-{cache_name}.json')
         cached(only_target_path, args.use_cache, args.verbose,
                lambda: ct.filter(combined_path, only_target_path, include_targets=[target_name], include_path=include_path, exclude_path=exclude_path))
 
-        without_target_path = os.path.join(data_path, 'without-%s.json' % cache_name)
+        without_target_path = os.path.join(data_path, f'without-{cache_name}.json')
         cached(without_target_path, args.use_cache, args.verbose,
                lambda: ct.filter(combined_path, without_target_path, exclude_targets=[target_name], include_path=include_path, exclude_path=exclude_path))
 
         if missing:
-            source_target_path = missing_target_path = os.path.join(data_path, 'missing-%s.json' % cache_name)
+            source_target_path = missing_target_path = os.path.join(
+                data_path, f'missing-{cache_name}.json'
+            )
             cached(missing_target_path, args.use_cache, args.verbose,
                    lambda: ct.missing(without_target_path, only_target_path, missing_target_path, only_gaps=True))
         else:
-            source_target_path = exclusive_target_path = os.path.join(data_path, 'exclusive-%s.json' % cache_name)
+            source_target_path = exclusive_target_path = os.path.join(
+                data_path, f'exclusive-{cache_name}.json'
+            )
             cached(exclusive_target_path, args.use_cache, args.verbose,
                    lambda: ct.missing(only_target_path, without_target_path, exclusive_target_path, only_gaps=True))
 
-        source_expanded_target_path = os.path.join(os.path.dirname(source_target_path), 'expanded-%s' % os.path.basename(source_target_path))
+        source_expanded_target_path = os.path.join(
+            os.path.dirname(source_target_path),
+            f'expanded-{os.path.basename(source_target_path)}',
+        )
         cached(source_expanded_target_path, args.use_cache, args.verbose,
                lambda: ct.expand(source_target_path, source_expanded_target_path))
 
         summary[target_name] = sources = collect_sources(source_expanded_target_path, git, coverage_data, result_sha)
 
-        txt_report_path = os.path.join(reports_path, '%s.txt' % cache_name)
+        txt_report_path = os.path.join(reports_path, f'{cache_name}.txt')
         cached(txt_report_path, args.use_cache, args.verbose,
                lambda: generate_report(sources, txt_report_path, coverage_data, target_name, missing=missing))
 
@@ -256,7 +260,7 @@ def incidental_report(args):
                          'As targets are removed, exclusive coverage on the remaining targets will increase.\n')
 
 
-def get_target_name_from_plugin_path(path):  # type: (str) -> str
+def get_target_name_from_plugin_path(path):    # type: (str) -> str
     """Return the integration test target name for the given plugin path."""
     parts = os.path.splitext(path)[0].split(os.path.sep)
     plugin_name = parts[-1]
@@ -270,14 +274,11 @@ def get_target_name_from_plugin_path(path):  # type: (str) -> str
     elif path.startswith('plugins/'):
         plugin_type = parts[1]
     else:
-        raise ApplicationError('Cannot determine plugin type from plugin path: %s' % path)
+        raise ApplicationError(
+            f'Cannot determine plugin type from plugin path: {path}'
+        )
 
-    if plugin_type is None:
-        target_name = plugin_name
-    else:
-        target_name = '%s_%s' % (plugin_type, plugin_name)
-
-    return target_name
+    return plugin_name if plugin_type is None else f'{plugin_type}_{plugin_name}'
 
 
 class CoverageData:
@@ -288,7 +289,9 @@ class CoverageData:
         self.result_sha = run["resources"]["repositories"]["self"]["version"]
         self.result = run['result']
 
-        self.github_base_url = 'https://github.com/ansible/ansible/blob/%s/' % self.result_sha
+        self.github_base_url = (
+            f'https://github.com/ansible/ansible/blob/{self.result_sha}/'
+        )
 
         # locate available results
         self.paths = sorted(glob.glob(os.path.join(result_path, '*', 'coverage-analyze-targets.json')))
@@ -302,7 +305,7 @@ class Git:
         try:
             self.show()
         except subprocess.CalledProcessError:
-            raise ApplicationError('%s: not a git repository' % path)
+            raise ApplicationError(f'{path}: not a git repository')
 
     def show(self, args=None):
         return self.run(['show'] + (args or []))
@@ -359,14 +362,12 @@ class SourceFile:
 
         is_arcs = ':' in dict(coverage_points).popitem()[0]
 
-        if is_arcs:
-            parse = parse_arc
-        else:
-            parse = int
-
-        self.covered_points = set(parse(v) for v in coverage_points)
+        parse = parse_arc if is_arcs else int
+        self.covered_points = {parse(v) for v in coverage_points}
         self.covered_arcs = self.covered_points if is_arcs else None
-        self.covered_lines = set(abs(p[0]) for p in self.covered_points) | set(abs(p[1]) for p in self.covered_points)
+        self.covered_lines = {abs(p[0]) for p in self.covered_points} | {
+            abs(p[1]) for p in self.covered_points
+        }
 
 
 def collect_sources(data_path, git, coverage_data, result_sha):
@@ -376,33 +377,54 @@ def collect_sources(data_path, git, coverage_data, result_sha):
     sources = []
 
     for path_coverage in data.values():
-        for path, path_data in path_coverage.items():
-            sources.append(SourceFile(path, git.show(['%s:%s' % (result_sha, path)]), coverage_data, path_data))
-
+        sources.extend(
+            SourceFile(
+                path,
+                git.show([f'{result_sha}:{path}']),
+                coverage_data,
+                path_data,
+            )
+            for path, path_data in path_coverage.items()
+        )
     return sources
 
 
 def generate_report(sources, report_path, coverage_data, target_name, missing):
     output = [
-        'Target: %s (%s coverage)' % (target_name, 'missing' if missing else 'exclusive'),
-        'GitHub: %stest/integration/targets/%s' % (coverage_data.github_base_url, target_name),
+        f"Target: {target_name} ({'missing' if missing else 'exclusive'} coverage)",
+        f'GitHub: {coverage_data.github_base_url}test/integration/targets/{target_name}',
     ]
 
     for source in sources:
         if source.covered_arcs:
-            output.extend([
-                '',
-                'Source: %s (%d arcs, %d/%d lines):' % (source.path, len(source.covered_arcs), len(source.covered_lines), len(source.lines)),
-                'GitHub: %s' % source.github_url,
-                '',
-            ])
+            output.extend(
+                [
+                    '',
+                    'Source: %s (%d arcs, %d/%d lines):'
+                    % (
+                        source.path,
+                        len(source.covered_arcs),
+                        len(source.covered_lines),
+                        len(source.lines),
+                    ),
+                    f'GitHub: {source.github_url}',
+                    '',
+                ]
+            )
         else:
-            output.extend([
-                '',
-                'Source: %s (%d/%d lines):' % (source.path, len(source.covered_lines), len(source.lines)),
-                'GitHub: %s' % source.github_url,
-                '',
-            ])
+            output.extend(
+                [
+                    '',
+                    'Source: %s (%d/%d lines):'
+                    % (
+                        source.path,
+                        len(source.covered_lines),
+                        len(source.lines),
+                    ),
+                    f'GitHub: {source.github_url}',
+                    '',
+                ]
+            )
 
         last_line_no = 0
 
@@ -420,10 +442,10 @@ def generate_report(sources, report_path, coverage_data, target_name, missing):
                 to_lines = sorted(p[1] for p in source.covered_points if abs(p[0]) == line_no)
 
                 if from_lines:
-                    notes += '  ### %s -> (here)' % ', '.join(str(from_line) for from_line in from_lines)
+                    notes += f"  ### {', '.join(str(from_line) for from_line in from_lines)} -> (here)"
 
                 if to_lines:
-                    notes += '  ### (here) -> %s' % ', '.join(str(to_line) for to_line in to_lines)
+                    notes += f"  ### (here) -> {', '.join(str(to_line) for to_line in to_lines)}"
 
             output.append('%4d  %s%s' % (line_no, line, notes))
             last_line_no = line_no
@@ -444,7 +466,7 @@ def cached(path, use_cache, show_messages, func):
         return
 
     if show_messages:
-        sys.stderr.write('%s: generating ... ' % path)
+        sys.stderr.write(f'{path}: generating ... ')
         sys.stderr.flush()
 
     func()

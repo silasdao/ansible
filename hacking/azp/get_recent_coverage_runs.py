@@ -24,28 +24,22 @@ import requests
 import sys
 import datetime
 
-# Following changes should be made to improve the overall style:
-# TODO use argparse for arguments.
-# TODO use new style formatting method.
-# TODO use requests session.
-# TODO type hints.
-
-BRANCH = 'devel'
 PIPELINE_ID = 20
 MAX_AGE = datetime.timedelta(hours=24)
 
-if len(sys.argv) > 1:
-    BRANCH = sys.argv[1]
+BRANCH = sys.argv[1] if len(sys.argv) > 1 else 'devel'
 
 
 def get_coverage_runs():
-    list_response = requests.get("https://dev.azure.com/ansible/ansible/_apis/pipelines/%s/runs?api-version=6.0-preview.1" % PIPELINE_ID)
+    list_response = requests.get(
+        f"https://dev.azure.com/ansible/ansible/_apis/pipelines/{PIPELINE_ID}/runs?api-version=6.0-preview.1"
+    )
     list_response.raise_for_status()
 
     runs = list_response.json()
 
     coverage_runs = []
-    for run_summary in runs["value"][0:1000]:
+    for run_summary in runs["value"][:1000]:
         run_response = requests.get(run_summary['url'])
 
         if run_response.status_code == 500 and 'Cannot serialize type Microsoft.Azure.Pipelines.WebApi.ContainerResource' in run_response.json()['message']:
@@ -58,7 +52,10 @@ def get_coverage_runs():
         run_response.raise_for_status()
         run = run_response.json()
 
-        if run['resources']['repositories']['self']['refName'] != 'refs/heads/%s' % BRANCH:
+        if (
+            run['resources']['repositories']['self']['refName']
+            != f'refs/heads/{BRANCH}'
+        ):
             continue
 
         if 'finishedDate' in run_summary:
@@ -66,7 +63,9 @@ def get_coverage_runs():
             if age > MAX_AGE:
                 break
 
-        artifact_response = requests.get("https://dev.azure.com/ansible/ansible/_apis/build/builds/%s/artifacts?api-version=6.0" % run['id'])
+        artifact_response = requests.get(
+            f"https://dev.azure.com/ansible/ansible/_apis/build/builds/{run['id']}/artifacts?api-version=6.0"
+        )
         artifact_response.raise_for_status()
 
         artifacts = artifact_response.json()['value']
@@ -88,22 +87,20 @@ def pretty_coverage_runs(runs):
 
     for run in sorted(ended, key=lambda x: x['finishedDate']):
         if run['result'] == "succeeded":
-            print('🙂 [%s] https://dev.azure.com/ansible/ansible/_build/results?buildId=%s (%s)' % (
-                stringc('PASS', 'green'),
-                run['id'],
-                run['finishedDate']))
+            print(
+                f"🙂 [{stringc('PASS', 'green')}] https://dev.azure.com/ansible/ansible/_build/results?buildId={run['id']} ({run['finishedDate']})"
+            )
         else:
-            print('😢 [%s] https://dev.azure.com/ansible/ansible/_build/results?buildId=%s (%s)' % (
-                stringc('FAIL', 'red'),
-                run['id'],
-                run['finishedDate']))
+            print(
+                f"😢 [{stringc('FAIL', 'red')}] https://dev.azure.com/ansible/ansible/_build/results?buildId={run['id']} ({run['finishedDate']})"
+            )
 
     if in_progress:
         print('The following runs are ongoing:')
         for run in in_progress:
-            print('🤔 [%s] https://dev.azure.com/ansible/ansible/_build/results?buildId=%s' % (
-                stringc('FATE', 'yellow'),
-                run['id']))
+            print(
+                f"🤔 [{stringc('FATE', 'yellow')}] https://dev.azure.com/ansible/ansible/_build/results?buildId={run['id']}"
+            )
 
 
 def main():

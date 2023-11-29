@@ -119,7 +119,9 @@ class ConfigCLI(CLI):
             if os.path.exists(b_config) and os.access(b_config, os.R_OK):
                 self.config = ConfigManager(self.config_file)
             else:
-                raise AnsibleOptionsError('The provided configuration file is missing or not accessible: %s' % to_native(self.config_file))
+                raise AnsibleOptionsError(
+                    f'The provided configuration file is missing or not accessible: {to_native(self.config_file)}'
+                )
         else:
             self.config = C.config
             self.config_file = self.config._config_file
@@ -127,16 +129,18 @@ class ConfigCLI(CLI):
         if self.config_file:
             try:
                 if not os.path.exists(self.config_file):
-                    raise AnsibleOptionsError("%s does not exist or is not accessible" % (self.config_file))
+                    raise AnsibleOptionsError(
+                        f"{self.config_file} does not exist or is not accessible"
+                    )
                 elif not os.path.isfile(self.config_file):
-                    raise AnsibleOptionsError("%s is not a valid file" % (self.config_file))
+                    raise AnsibleOptionsError(f"{self.config_file} is not a valid file")
 
                 os.environ['ANSIBLE_CONFIG'] = to_native(self.config_file)
             except Exception:
                 if context.CLIARGS['action'] in ['view']:
                     raise
                 elif context.CLIARGS['action'] in ['edit', 'update']:
-                    display.warning("File does not exist, used empty file: %s" % self.config_file)
+                    display.warning(f"File does not exist, used empty file: {self.config_file}")
 
         elif context.CLIARGS['action'] == 'view':
             raise AnsibleError('Invalid or no config file was supplied')
@@ -150,24 +154,6 @@ class ConfigCLI(CLI):
         '''
         raise AnsibleError("Option not implemented yet")
 
-        # pylint: disable=unreachable
-        if context.CLIARGS['setting'] is None:
-            raise AnsibleOptionsError("update option requires a setting to update")
-
-        (entry, value) = context.CLIARGS['setting'].split('=')
-        if '.' in entry:
-            (section, option) = entry.split('.')
-        else:
-            section = 'defaults'
-            option = entry
-        subprocess.call([
-            'ansible',
-            '-m', 'ini_file',
-            'localhost',
-            '-c', 'local',
-            '-a', '"dest=%s section=%s option=%s value=%s backup=yes"' % (self.config_file, section, option, value)
-        ])
-
     def execute_view(self):
         '''
         Displays the current config file
@@ -176,7 +162,7 @@ class ConfigCLI(CLI):
             with open(self.config_file, 'rb') as f:
                 self.pager(to_text(f.read(), errors='surrogate_or_strict'))
         except Exception as e:
-            raise AnsibleError("Failed to open config file: %s" % to_native(e))
+            raise AnsibleError(f"Failed to open config file: {to_native(e)}")
 
     def execute_edit(self):
         '''
@@ -184,17 +170,9 @@ class ConfigCLI(CLI):
         '''
         raise AnsibleError("Option not implemented yet")
 
-        # pylint: disable=unreachable
-        try:
-            editor = shlex.split(C.config.get_config_value('EDITOR'))
-            editor.append(self.config_file)
-            subprocess.call(editor)
-        except Exception as e:
-            raise AnsibleError("Failed to open editor: %s" % to_native(e))
-
     def _list_plugin_settings(self, ptype, plugins=None):
         entries = {}
-        loader = getattr(plugin_loader, '%s_loader' % ptype)
+        loader = getattr(plugin_loader, f'{ptype}_loader')
 
         # build list
         if plugins:
@@ -202,7 +180,7 @@ class ConfigCLI(CLI):
             for plugin in plugins:
                 p = loader.get(plugin, class_only=True)
                 if p is None:
-                    display.warning("Skipping %s as we could not find matching plugin" % plugin)
+                    display.warning(f"Skipping {plugin} as we could not find matching plugin")
                 else:
                     plugin_cs.append(p)
         else:
@@ -259,11 +237,7 @@ class ConfigCLI(CLI):
     def _get_settings_vars(self, settings, subkey):
 
         data = []
-        if context.CLIARGS['commented']:
-            prefix = '#'
-        else:
-            prefix = ''
-
+        prefix = '#' if context.CLIARGS['commented'] else ''
         for setting in settings:
 
             if not settings[setting].get('description'):
@@ -273,10 +247,7 @@ class ConfigCLI(CLI):
             if subkey == 'env':
                 stype = settings[setting].get('type', '')
                 if stype == 'boolean':
-                    if default:
-                        default = '1'
-                    else:
-                        default = '0'
+                    default = '1' if default else '0'
                 elif default:
                     if stype == 'list':
                         if not isinstance(default, string_types):
@@ -285,7 +256,7 @@ class ConfigCLI(CLI):
                                 default = ', '.join(default)
                             except Exception as e:
                                 # list of other stuff
-                                default = '%s' % to_native(default)
+                                default = f'{to_native(default)}'
                     if isinstance(default, string_types) and not is_quoted(default):
                         default = shlex.quote(default)
                 elif default is None:
@@ -298,13 +269,13 @@ class ConfigCLI(CLI):
                 else:
                     desc = '\n#'.join(settings[setting]['description'])
                 name = settings[setting].get('name', setting)
-                data.append('# %s(%s): %s' % (name, settings[setting].get('type', 'string'), desc))
+                data.append(f"# {name}({settings[setting].get('type', 'string')}): {desc}")
 
                 # TODO: might need quoting and value coercion depending on type
                 if subkey == 'env':
                     if entry.startswith('_ANSIBLE_'):
                         continue
-                    data.append('%s%s=%s' % (prefix, entry, default))
+                    data.append(f'{prefix}{entry}={default}')
                 elif subkey == 'vars':
                     if entry.startswith('_ansible_'):
                         continue
@@ -335,9 +306,9 @@ class ConfigCLI(CLI):
                 continue
 
             if isinstance(opt['description'], string_types):
-                desc = '# (%s) %s' % (opt.get('type', 'string'), opt['description'])
+                desc = f"# ({opt.get('type', 'string')}) {opt['description']}"
             else:
-                desc = "# (%s) " % opt.get('type', 'string')
+                desc = f"# ({opt.get('type', 'string')}) "
                 desc += "\n# ".join(opt['description'])
 
             if 'ini' in opt and opt['ini']:
@@ -353,7 +324,7 @@ class ConfigCLI(CLI):
                     default = ''
 
                 if context.CLIARGS['commented']:
-                    entry['key'] = ';%s' % entry['key']
+                    entry['key'] = f";{entry['key']}"
 
                 key = desc + '\n%s=%s' % (entry['key'], default)
                 sections[entry['section']].append(key)
@@ -381,10 +352,9 @@ class ConfigCLI(CLI):
 
             if sections:
                 for section in sections.keys():
-                    data.append('[%s]' % section)
+                    data.append(f'[{section}]')
                     for key in sections[section]:
-                        data.append(key)
-                        data.append('')
+                        data.extend((key, ''))
                     data.append('')
 
         elif context.CLIARGS['format'] in ('env', 'vars'):  # TODO: add yaml once that config option is added
@@ -405,24 +375,21 @@ class ConfigCLI(CLI):
             if context.CLIARGS['format'] == 'display':
                 if isinstance(config[setting], Setting):
                     # proceed normally
-                    if config[setting].origin == 'default':
-                        color = 'green'
-                    elif config[setting].origin == 'REQUIRED':
+                    if config[setting].origin == 'REQUIRED':
                         # should include '_terms', '_input', etc
                         color = 'red'
+                    elif config[setting].origin == 'default':
+                        color = 'green'
                     else:
                         color = 'yellow'
-                    msg = "%s(%s) = %s" % (setting, config[setting].origin, config[setting].value)
+                    msg = f"{setting}({config[setting].origin}) = {config[setting].value}"
                 else:
                     color = 'green'
-                    msg = "%s(%s) = %s" % (setting, 'default', config[setting].get('default'))
+                    msg = f"{setting}(default) = {config[setting].get('default')}"
 
                 entry = stringc(msg, color)
             else:
-                entry = {}
-                for key in config[setting]._fields:
-                    entry[key] = getattr(config[setting], key)
-
+                entry = {key: getattr(config[setting], key) for key in config[setting]._fields}
             if not context.CLIARGS['only_changed'] or changed:
                 entries.append(entry)
 
@@ -439,7 +406,7 @@ class ConfigCLI(CLI):
     def _get_plugin_configs(self, ptype, plugins):
 
         # prep loading
-        loader = getattr(plugin_loader, '%s_loader' % ptype)
+        loader = getattr(plugin_loader, f'{ptype}_loader')
 
         # acumulators
         output = []
@@ -451,7 +418,7 @@ class ConfigCLI(CLI):
             for plugin in plugins:
                 p = loader.get(plugin, class_only=True)
                 if p is None:
-                    display.warning("Skipping %s as we could not find matching plugin" % plugin)
+                    display.warning(f"Skipping {plugin} as we could not find matching plugin")
                 else:
                     plugin_cs.append(loader.get(plugin, class_only=True))
         else:
@@ -474,7 +441,9 @@ class ConfigCLI(CLI):
                 # populate config entries by loading plugin
                 dump = loader.get(name, class_only=True)
             except Exception as e:
-                display.warning('Skipping "%s" %s plugin, as we cannot load plugin to check config due to : %s' % (name, ptype, to_native(e)))
+                display.warning(
+                    f'Skipping "{name}" {ptype} plugin, as we cannot load plugin to check config due to : {to_native(e)}'
+                )
                 continue
 
             # actually get the values
@@ -482,21 +451,20 @@ class ConfigCLI(CLI):
                 try:
                     v, o = C.config.get_config_value_and_origin(setting, cfile=self.config_file, plugin_type=ptype, plugin_name=name, variables=get_constants())
                 except AnsibleError as e:
-                    if to_text(e).startswith('No setting was provided for required configuration'):
-                        v = None
-                        o = 'REQUIRED'
-                    else:
+                    if not to_text(e).startswith(
+                        'No setting was provided for required configuration'
+                    ):
                         raise e
 
+                    v = None
+                    o = 'REQUIRED'
                 if v is None and o is None:
                     # not all cases will be error
                     o = 'REQUIRED'
 
                 config_entries[finalname][setting] = Setting(setting, v, o, None)
 
-            # pretty please!
-            results = self._render_settings(config_entries[finalname])
-            if results:
+            if results := self._render_settings(config_entries[finalname]):
                 if context.CLIARGS['format'] == 'display':
                     # avoid header for empty lists (only changed!)
                     output.append('\n%s:\n%s' % (finalname, '_' * len(finalname)))
@@ -527,7 +495,7 @@ class ConfigCLI(CLI):
                     if ptype in ('modules', 'doc_fragments'):
                         pname = ptype.upper()
                     else:
-                        pname = '%s_PLUGINS' % ptype.upper()
+                        pname = f'{ptype.upper()}_PLUGINS'
                     output.append({pname: plugin_list})
         else:
             # deal with plugins

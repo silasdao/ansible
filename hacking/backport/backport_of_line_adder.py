@@ -52,14 +52,9 @@ def normalize_pr_url(pr, allow_non_ansible_ansible=False, only_number=False):
     if not allow_non_ansible_ansible and 'ansible/ansible' not in pr:
         raise Exception('Non ansible/ansible repo given where not expected')
 
-    re_match = PULL_HTTP_URL_RE.match(pr)
-    if re_match:
-        if only_number:
-            return int(re_match.group('ticket'))
-        return pr
-
-    re_match = PULL_URL_RE.match(pr)
-    if re_match:
+    if re_match := PULL_HTTP_URL_RE.match(pr):
+        return int(re_match.group('ticket')) if only_number else pr
+    if re_match := PULL_URL_RE.match(pr):
         if only_number:
             return int(re_match.group('ticket'))
         return 'https://github.com/{0}/{1}/pull/{2}'.format(
@@ -75,10 +70,10 @@ def url_to_org_repo(url):
     Given a full Github PR URL, extract the user/org and repo name.
     Return them in the form: "user/repo"
     '''
-    match = PULL_HTTP_URL_RE.match(url)
-    if not match:
+    if match := PULL_HTTP_URL_RE.match(url):
+        return '{0}/{1}'.format(match.group('user'), match.group('repo'))
+    else:
         return ''
-    return '{0}/{1}'.format(match.group('user'), match.group('repo'))
 
 
 def generate_new_body(pr, source_pr):
@@ -126,9 +121,7 @@ def get_prs_for_commit(g, commit):
     if not commits or len(commits) == 0:
         return []
     pulls = commits[0].get_pulls().get_page(0)
-    if not pulls or len(pulls) == 0:
-        return []
-    return pulls
+    return [] if not pulls or len(pulls) == 0 else pulls
 
 
 def search_backport(pr, g, ansible_ansible):
@@ -152,9 +145,7 @@ def search_backport(pr, g, ansible_ansible):
 
     possibilities = []
 
-    # 1. Try searching for it in the title.
-    title_search = PULL_BACKPORT_IN_TITLE.match(pr.title)
-    if title_search:
+    if title_search := PULL_BACKPORT_IN_TITLE.match(pr.title):
         ticket = title_search.group('ticket1')
         if not ticket:
             ticket = title_search.group('ticket2')
@@ -166,9 +157,7 @@ def search_backport(pr, g, ansible_ansible):
     # 2. Search for clues in the body of the PR
     body_lines = pr.body.split('\n')
     for line in body_lines:
-        # a. Try searching for a `git cherry-pick` line
-        cherrypick = PULL_CHERRY_PICKED_FROM.match(line)
-        if cherrypick:
+        if cherrypick := PULL_CHERRY_PICKED_FROM.match(line):
             prs = get_prs_for_commit(g, cherrypick.group('hash'))
             possibilities.extend(prs)
             continue
@@ -258,7 +247,6 @@ if __name__ == '__main__':
         # For now, use the first match, which is also the most likely
         # candidate.
         pr = possibilities[0]
-        commit_edit(new_pr, pr)
     else:
         try:
             # TODO: Fix having to call this twice to save some regex evals
@@ -270,4 +258,5 @@ if __name__ == '__main__':
             print(e)
             print('Could not load PR {0}'.format(sys.argv[2]))
             sys.exit(1)
-        commit_edit(new_pr, pr)
+
+    commit_edit(new_pr, pr)

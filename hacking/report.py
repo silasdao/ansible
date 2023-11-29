@@ -58,9 +58,7 @@ def parse_args():
     if argcomplete:
         argcomplete.autocomplete(parser)
 
-    args = parser.parse_args()
-
-    return args
+    return parser.parse_args()
 
 
 def query_database():
@@ -196,17 +194,17 @@ def populate_integration_targets():
 def create_table(cursor, name, columns):
     schema = ', '.join('%s %s' % column for column in columns)
 
-    cursor.execute('DROP TABLE IF EXISTS %s' % name)
-    cursor.execute('CREATE TABLE %s (%s)' % (name, schema))
+    cursor.execute(f'DROP TABLE IF EXISTS {name}')
+    cursor.execute(f'CREATE TABLE {name} ({schema})')
 
 
 def populate_table(cursor, rows, name, columns):
     create_table(cursor, name, columns)
 
-    values = ', '.join([':%s' % column[0] for column in columns])
+    values = ', '.join([f':{column[0]}' for column in columns])
 
     for row in rows:
-        cursor.execute('INSERT INTO %s VALUES (%s)' % (name, values), row)
+        cursor.execute(f'INSERT INTO {name} VALUES ({values})', row)
 
 
 def populate_data(data):

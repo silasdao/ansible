@@ -44,8 +44,7 @@ class Issue:
                 cmd.extend(('--label', label))
 
         process = subprocess.run(cmd, capture_output=True, check=True)
-        url = process.stdout.decode().strip()
-        return url
+        return process.stdout.decode().strip()
 
 
 @dataclasses.dataclass(frozen=True)
@@ -180,16 +179,17 @@ class DeprecatedConfig(Deprecation):
 
     @staticmethod
     def parse(message: str) -> DeprecatedConfig:
-        match = re.search('^(?P<path>.*):[0-9]+:[0-9]+: (?P<config>.*) is scheduled for removal in (?P<version>[0-9.]+)$', message)
-
-        if not match:
+        if match := re.search(
+            '^(?P<path>.*):[0-9]+:[0-9]+: (?P<config>.*) is scheduled for removal in (?P<version>[0-9.]+)$',
+            message,
+        ):
+            return DeprecatedConfig(
+                path=match.group('path'),
+                config=match.group('config'),
+                version=match.group('version'),
+            )
+        else:
             raise Exception(f'Unable to parse: {message}')
-
-        return DeprecatedConfig(
-            path=match.group('path'),
-            config=match.group('config'),
-            version=match.group('version'),
-        )
 
     def create_bug_report(self) -> BugReport:
         return BugReport(
@@ -213,18 +213,19 @@ class UpdateBundled(Deprecation):
 
     @staticmethod
     def parse(message: str) -> UpdateBundled:
-        match = re.search('^(?P<path>.*):[0-9]+:[0-9]+: UPDATE (?P<package>.*) from (?P<old>[0-9.]+) to (?P<new>[0-9.]+) (?P<link>https://.*)$', message)
-
-        if not match:
+        if match := re.search(
+            '^(?P<path>.*):[0-9]+:[0-9]+: UPDATE (?P<package>.*) from (?P<old>[0-9.]+) to (?P<new>[0-9.]+) (?P<link>https://.*)$',
+            message,
+        ):
+            return UpdateBundled(
+                path=match.group('path'),
+                package=match.group('package'),
+                old_version=match.group('old'),
+                new_version=match.group('new'),
+                json_link=match.group('link'),
+            )
+        else:
             raise Exception(f'Unable to parse: {message}')
-
-        return UpdateBundled(
-            path=match.group('path'),
-            package=match.group('package'),
-            old_version=match.group('old'),
-            new_version=match.group('new'),
-            json_link=match.group('link'),
-        )
 
     def create_bug_report(self) -> BugReport:
         return BugReport(
@@ -275,9 +276,7 @@ def parse_args() -> Args:
     create_deprecation_parser(subparser)
     create_feature_parser(subparser)
 
-    args = invoke_parser(parser)
-
-    return args
+    return invoke_parser(parser)
 
 
 def create_deprecation_parser(subparser) -> None:
@@ -332,21 +331,19 @@ def invoke_parser(parser: argparse.ArgumentParser) -> Args:
 
     parsed_args = parser.parse_args()
 
-    kvp = {}
     args_type = parsed_args.type
 
-    for field in dataclasses.fields(args_type):
-        kvp[field.name] = getattr(parsed_args, field.name)
-
-    args = args_type(**kvp)
-
-    return args
+    kvp = {
+        field.name: getattr(parsed_args, field.name)
+        for field in dataclasses.fields(args_type)
+    }
+    return args_type(**kvp)
 
 
 def run_sanity_test(test_name: str) -> list[str]:
     cmd = ['ansible-test', 'sanity', '--test', test_name, '--lint', '--failure-ok']
     skip_path = 'test/sanity/code-smell/skip.txt'
-    skip_temp_path = skip_path + '.tmp'
+    skip_temp_path = f'{skip_path}.tmp'
 
     os.rename(skip_path, skip_temp_path)  # make sure ansible-test isn't configured to skip any tests
 
@@ -355,16 +352,13 @@ def run_sanity_test(test_name: str) -> list[str]:
     finally:
         os.rename(skip_temp_path, skip_path)  # restore the skip entries
 
-    messages = process.stdout.decode().splitlines()
-
-    return messages
+    return process.stdout.decode().splitlines()
 
 
 def create_issues_from_deprecation_messages(test_type: t.Type[Deprecation], messages: list[str]) -> list[Issue]:
     deprecations = [test_type.parse(message) for message in messages]
     bug_reports = [deprecation.create_bug_report() for deprecation in deprecations]
-    issues = [bug_report.create_issue(PROJECT) for bug_report in bug_reports]
-    return issues
+    return [bug_report.create_issue(PROJECT) for bug_report in bug_reports]
 
 
 def info(message: str) -> None:

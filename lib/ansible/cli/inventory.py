@@ -107,22 +107,14 @@ class InventoryCLI(CLI):
         display.verbosity = options.verbosity
         self.validate_conflicts(options)
 
-        # there can be only one! and, at least, one!
-        used = 0
-        for opt in (options.list, options.host, options.graph):
-            if opt:
-                used += 1
+        used = sum(1 for opt in (options.list, options.host, options.graph) if opt)
         if used == 0:
             raise AnsibleOptionsError("No action selected, at least one of --host, --graph or --list needs to be specified.")
         elif used > 1:
             raise AnsibleOptionsError("Conflicting options used, only one of --host, --graph or --list can be used at the same time.")
 
         # set host pattern to default if not supplied
-        if options.args:
-            options.pattern = options.args
-        else:
-            options.pattern = 'all'
-
+        options.pattern = options.args if options.args else 'all'
         return options
 
     def run(self):
@@ -170,7 +162,9 @@ class InventoryCLI(CLI):
                     with open(to_bytes(outfile), 'wb') as f:
                         f.write(to_bytes(results))
                 except (OSError, IOError) as e:
-                    raise AnsibleError('Unable to write to destination file (%s): %s' % (to_native(outfile), to_native(e)))
+                    raise AnsibleError(
+                        f'Unable to write to destination file ({to_native(outfile)}): {to_native(e)}'
+                    )
             sys.exit(0)
 
         sys.exit(1)
@@ -188,7 +182,7 @@ class InventoryCLI(CLI):
                 results = toml_dumps(stuff)
             except TypeError as e:
                 raise AnsibleError(
-                    'The source inventory contains a value that cannot be represented in TOML: %s' % e
+                    f'The source inventory contains a value that cannot be represented in TOML: {e}'
                 )
             except KeyError as e:
                 raise AnsibleError(
@@ -204,7 +198,9 @@ class InventoryCLI(CLI):
                 results = json.dumps(stuff, cls=AnsibleJSONEncoder, sort_keys=True, indent=4, preprocess_unsafe=True, ensure_ascii=False)
             except TypeError as e:
                 results = json.dumps(stuff, cls=AnsibleJSONEncoder, sort_keys=False, indent=4, preprocess_unsafe=True, ensure_ascii=False)
-                display.warning("Could not sort JSON output due to issues while sorting keys: %s" % to_native(e))
+                display.warning(
+                    f"Could not sort JSON output due to issues while sorting keys: {to_native(e)}"
+                )
 
         return results
 
@@ -240,8 +236,7 @@ class InventoryCLI(CLI):
         return self._remove_internal(hostvars)
 
     def _get_group(self, gname):
-        group = self.inventory.groups.get(gname)
-        return group
+        return self.inventory.groups.get(gname)
 
     @staticmethod
     def _remove_internal(dump):
@@ -261,20 +256,20 @@ class InventoryCLI(CLI):
 
     @staticmethod
     def _show_vars(dump, depth):
-        result = []
-        for (name, val) in sorted(dump.items()):
-            result.append(InventoryCLI._graph_name('{%s = %s}' % (name, val), depth))
-        return result
+        return [
+            InventoryCLI._graph_name('{%s = %s}' % (name, val), depth)
+            for name, val in sorted(dump.items())
+        ]
 
     @staticmethod
     def _graph_name(name, depth=0):
         if depth:
-            name = "  |" * (depth) + "--%s" % name
+            name = "  |" * (depth) + f"--{name}"
         return name
 
     def _graph_group(self, group, depth=0):
 
-        result = [self._graph_name('@%s:' % group.name, depth)]
+        result = [self._graph_name(f'@{group.name}:', depth)]
         depth = depth + 1
         for kid in group.child_groups:
             result.extend(self._graph_group(kid, depth))
@@ -292,8 +287,7 @@ class InventoryCLI(CLI):
 
     def inventory_graph(self):
 
-        start_at = self._get_group(context.CLIARGS['pattern'])
-        if start_at:
+        if start_at := self._get_group(context.CLIARGS['pattern']):
             return '\n'.join(self._graph_group(start_at))
         else:
             raise AnsibleOptionsError("Pattern must be valid group name when using --graph")

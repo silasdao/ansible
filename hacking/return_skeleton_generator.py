@@ -52,7 +52,7 @@ def get_return_data(key, value):
     # The OrderedDict here is so that, for complex objects, the
     # summary data is at the top before the contains information
     returns_info = {key: OrderedDict()}
-    returns_info[key]['description'] = "FIXME *** add description for %s" % key
+    returns_info[key]['description'] = f"FIXME *** add description for {key}"
     returns_info[key]['returned'] = "always"
     if isinstance(value, dict):
         returns_info[key]['type'] = 'complex'
@@ -81,11 +81,7 @@ def get_all_items(data):
 def main(args):
     yaml.representer.SafeRepresenter.add_representer(OrderedDict, represent_ordereddict)
 
-    if args:
-        src = open(args[0])
-    else:
-        src = sys.stdin
-
+    src = open(args[0]) if args else sys.stdin
     data = json.load(src, strict=False)
     docs = get_all_items(data)
     if 'invocation' in docs:

@@ -43,7 +43,7 @@ def list_collection_dirs(search_paths=None, coll_filter=None, artifacts_manager=
                 try:
                     namespace, collection = coll_name.split('.')
                 except ValueError:
-                    raise AnsibleError("Invalid collection pattern supplied: %s" % coll_name)
+                    raise AnsibleError(f"Invalid collection pattern supplied: {coll_name}")
                 namespace_filter.add(namespace)
                 if not has_pure_namespace_filter:
                     if collection_filter is None:

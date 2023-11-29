@@ -73,10 +73,10 @@ class PlaybookCLI(CLI):
 
         options = super(PlaybookCLI, self).post_process_args(options)
 
-        if options.listtags:
             # default to all tags (including never), when listing tags
             # unless user specified tags
-            if not havetags:
+        if not havetags:
+            if options.listtags:
                 options.tags = ['never', 'all']
 
         display.verbosity = options.verbosity
@@ -107,9 +107,9 @@ class PlaybookCLI(CLI):
             else:
                 # not an FQCN so must be a file
                 if not os.path.exists(playbook):
-                    raise AnsibleError("the playbook: %s could not be found" % playbook)
+                    raise AnsibleError(f"the playbook: {playbook} could not be found")
                 if not (os.path.isfile(playbook) or stat.S_ISFIFO(os.stat(playbook).st_mode)):
-                    raise AnsibleError("the playbook: %s does not appear to be a file" % playbook)
+                    raise AnsibleError(f"the playbook: {playbook} does not appear to be a file")
 
                 # check if playbook is from collection (path can be passed directly)
                 playbook_collection = _get_collection_name_from_path(playbook)
@@ -200,12 +200,8 @@ class PlaybookCLI(CLI):
 
                                     all_tags.update(task.tags)
                                     if context.CLIARGS['listtasks']:
-                                        cur_tags = list(mytags.union(set(task.tags)))
-                                        cur_tags.sort()
-                                        if task.name:
-                                            taskmsg += "      %s" % task.get_name()
-                                        else:
-                                            taskmsg += "      %s" % task.action
+                                        cur_tags = sorted(mytags.union(set(task.tags)))
+                                        taskmsg += f"      {task.get_name()}" if task.name else f"      {task.action}"
                                         taskmsg += "\tTAGS: [%s]\n" % ', '.join(cur_tags)
 
                             return taskmsg
@@ -218,8 +214,7 @@ class PlaybookCLI(CLI):
                             taskmsg += _process_block(block)
 
                         if context.CLIARGS['listtags']:
-                            cur_tags = list(mytags.union(all_tags))
-                            cur_tags.sort()
+                            cur_tags = sorted(mytags.union(all_tags))
                             taskmsg += "      TASK TAGS: [%s]\n" % ', '.join(cur_tags)
 
                         display.display(taskmsg)

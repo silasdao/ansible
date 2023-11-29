@@ -54,9 +54,13 @@ class AdHocCLI(CLI):
                                  help="The action's options in space separated k=v format: -a 'opt1=val1 opt2=val2' "
                                       "or a json string: -a '{\"opt1\": \"val1\", \"opt2\": \"val2\"}'",
                                  default=C.DEFAULT_MODULE_ARGS)
-        self.parser.add_argument('-m', '--module-name', dest='module_name',
-                                 help="Name of the action to execute (default=%s)" % C.DEFAULT_MODULE_NAME,
-                                 default=C.DEFAULT_MODULE_NAME)
+        self.parser.add_argument(
+            '-m',
+            '--module-name',
+            dest='module_name',
+            help=f"Name of the action to execute (default={C.DEFAULT_MODULE_NAME})",
+            default=C.DEFAULT_MODULE_NAME,
+        )
         self.parser.add_argument('args', metavar='pattern', help='host pattern')
 
     def post_process_args(self, options):
@@ -121,28 +125,28 @@ class AdHocCLI(CLI):
         except AnsibleError:
             if context.CLIARGS['subset']:
                 raise
-            else:
-                hosts = []
-                display.warning("No hosts matched, nothing to do")
+            hosts = []
+            display.warning("No hosts matched, nothing to do")
 
         # just listing hosts?
         if context.CLIARGS['listhosts']:
             display.display('  hosts (%d):' % len(hosts))
             for host in hosts:
-                display.display('    %s' % host)
+                display.display(f'    {host}')
             return 0
 
         # verify we have arguments if we know we need em
         if context.CLIARGS['module_name'] in C.MODULE_REQUIRE_ARGS and not context.CLIARGS['module_args']:
-            err = "No argument passed to %s module" % context.CLIARGS['module_name']
+            err = f"No argument passed to {context.CLIARGS['module_name']} module"
             if pattern.endswith(".yml"):
-                err = err + ' (did you mean to run ansible-playbook?)'
+                err = f'{err} (did you mean to run ansible-playbook?)'
             raise AnsibleOptionsError(err)
 
         # Avoid modules that don't work with ad-hoc
         if context.CLIARGS['module_name'] in C._ACTION_IMPORT_PLAYBOOK:
-            raise AnsibleOptionsError("'%s' is not a valid action for ad-hoc commands"
-                                      % context.CLIARGS['module_name'])
+            raise AnsibleOptionsError(
+                f"'{context.CLIARGS['module_name']}' is not a valid action for ad-hoc commands"
+            )
 
         # construct playbook objects to wrap task
         play_ds = self._play_ds(pattern, context.CLIARGS['seconds'], context.CLIARGS['poll_interval'])

@@ -55,7 +55,9 @@ def jdump(text):
         display.display(json_dump(text))
     except TypeError as e:
         display.vvv(traceback.format_exc())
-        raise AnsibleError('We could not convert all the documentation into JSON as there was a conversion issue: %s' % to_native(e))
+        raise AnsibleError(
+            f'We could not convert all the documentation into JSON as there was a conversion issue: {to_native(e)}'
+        )
 
 
 class RoleMixin(object):
@@ -91,7 +93,9 @@ class RoleMixin(object):
         elif role_path:
             meta_path = os.path.join(role_path, 'meta')
         else:
-            raise AnsibleError("A path is required to load argument specs for role '%s'" % role_name)
+            raise AnsibleError(
+                f"A path is required to load argument specs for role '{role_name}'"
+            )
 
         path = None
 
@@ -112,7 +116,10 @@ class RoleMixin(object):
                     data = {}
                 return data.get('argument_specs', {})
         except (IOError, OSError) as e:
-            raise AnsibleParserError("An error occurred while trying to read the file '%s': %s" % (path, to_native(e)), orig_exc=e)
+            raise AnsibleParserError(
+                f"An error occurred while trying to read the file '{path}': {to_native(e)}",
+                orig_exc=e,
+            )
 
     def _find_all_normal_roles(self, role_paths, name_filters=None):
         """Find all non-collection roles that have an argument spec file.
@@ -202,27 +209,16 @@ class RoleMixin(object):
 
         :returns: A tuple with the FQCN role name and a summary dict.
         """
-        if collection:
-            fqcn = '.'.join([collection, role])
-        else:
-            fqcn = role
-        summary = {}
-        summary['collection'] = collection
-        summary['entry_points'] = {}
+        fqcn = '.'.join([collection, role]) if collection else role
+        summary = {'collection': collection, 'entry_points': {}}
         for ep in argspec.keys():
             entry_spec = argspec[ep] or {}
             summary['entry_points'][ep] = entry_spec.get('short_description', '')
         return (fqcn, summary)
 
     def _build_doc(self, role, path, collection, argspec, entry_point):
-        if collection:
-            fqcn = '.'.join([collection, role])
-        else:
-            fqcn = role
-        doc = {}
-        doc['path'] = path
-        doc['collection'] = collection
-        doc['entry_points'] = {}
+        fqcn = '.'.join([collection, role]) if collection else role
+        doc = {'path': path, 'collection': collection, 'entry_points': {}}
         for ep in argspec.keys():
             if entry_point is None or ep == entry_point:
                 entry_spec = argspec[ep] or {}
@@ -266,10 +262,7 @@ class RoleMixin(object):
         """
         roles_path = self._get_roles_path()
         collection_filter = self._get_collection_filter()
-        if not collection_filter:
-            roles = self._find_all_normal_roles(roles_path)
-        else:
-            roles = []
+        roles = [] if collection_filter else self._find_all_normal_roles(roles_path)
         collroles = self._find_all_collection_roles(collection_filter=collection_filter)
 
         result = {}
@@ -283,7 +276,7 @@ class RoleMixin(object):
                 if fail_on_errors:
                     raise
                 result[role] = {
-                    'error': 'Error while loading role argument spec: %s' % to_native(e),
+                    'error': f'Error while loading role argument spec: {to_native(e)}'
                 }
 
         for role, collection, collection_path in collroles:
@@ -294,8 +287,8 @@ class RoleMixin(object):
             except Exception as e:
                 if fail_on_errors:
                     raise
-                result['%s.%s' % (collection, role)] = {
-                    'error': 'Error while loading role argument spec: %s' % to_native(e),
+                result[f'{collection}.{role}'] = {
+                    'error': f'Error while loading role argument spec: {to_native(e)}'
                 }
 
         return result
@@ -322,9 +315,7 @@ class RoleMixin(object):
                 if doc:
                     result[fqcn] = doc
             except Exception as e:  # pylint:disable=broad-except
-                result[role] = {
-                    'error': 'Error while processing role: %s' % to_native(e),
-                }
+                result[role] = {'error': f'Error while processing role: {to_native(e)}'}
 
         for role, collection, collection_path in collroles:
             try:
@@ -333,8 +324,8 @@ class RoleMixin(object):
                 if doc:
                     result[fqcn] = doc
             except Exception as e:  # pylint:disable=broad-except
-                result['%s.%s' % (collection, role)] = {
-                    'error': 'Error while processing role: %s' % to_native(e),
+                result[f'{collection}.{role}'] = {
+                    'error': f'Error while processing role: {to_native(e)}'
                 }
 
         return result
@@ -395,8 +386,7 @@ class DocCLI(CLI, RoleMixin):
         value = None
         if '=' in text:
             text, value = text.split('=', 1)
-        m = DocCLI._FQCN_TYPE_PREFIX_RE.match(text)
-        if m:
+        if m := DocCLI._FQCN_TYPE_PREFIX_RE.match(text):
             plugin_fqcn = m.group(1)
             plugin_type = m.group(2)
             text = m.group(3)
@@ -481,14 +471,32 @@ class DocCLI(CLI, RoleMixin):
                                help="Select the entry point for role(s).")
 
         # TODO: warn with --json as it is incompatible
-        exclusive.add_argument("-s", "--snippet", action="store_true", default=False, dest='show_snippet',
-                               help='Show playbook snippet for these plugin types: %s' % ', '.join(SNIPPETS))
+        exclusive.add_argument(
+            "-s",
+            "--snippet",
+            action="store_true",
+            default=False,
+            dest='show_snippet',
+            help=f"Show playbook snippet for these plugin types: {', '.join(SNIPPETS)}",
+        )
 
         # TODO: warn when arg/plugin is passed
-        exclusive.add_argument("-F", "--list_files", action="store_true", default=False, dest="list_files",
-                               help='Show plugin names and their source files without summaries (implies --list). %s' % coll_filter)
-        exclusive.add_argument("-l", "--list", action="store_true", default=False, dest='list_dir',
-                               help='List available plugins. %s' % coll_filter)
+        exclusive.add_argument(
+            "-F",
+            "--list_files",
+            action="store_true",
+            default=False,
+            dest="list_files",
+            help=f'Show plugin names and their source files without summaries (implies --list). {coll_filter}',
+        )
+        exclusive.add_argument(
+            "-l",
+            "--list",
+            action="store_true",
+            default=False,
+            dest='list_dir',
+            help=f'List available plugins. {coll_filter}',
+        )
         exclusive.add_argument("--metadata-dump", action="store_true", default=False, dest='dump',
                                help='**For internal use only** Dump json metadata for all entries, ignores other options.')
 
@@ -512,9 +520,9 @@ class DocCLI(CLI, RoleMixin):
         deprecated = []
 
         # format display per option
-        if context.CLIARGS['list_files']:
-            # list plugin file names
-            for plugin in sorted(results.keys()):
+        for plugin in sorted(results.keys()):
+                # format display per option
+            if context.CLIARGS['list_files']:
                 filename = to_native(results[plugin])
 
                 # handle deprecated for builtin/legacy
@@ -525,13 +533,11 @@ class DocCLI(CLI, RoleMixin):
                     deprecated.append("%-*s %-*.*s" % (displace, plugin, linelimit, len(filename), filename))
                 else:
                     text.append("%-*s %-*.*s" % (displace, plugin, linelimit, len(filename), filename))
-        else:
-            # list plugin names and short desc
-            for plugin in sorted(results.keys()):
+            else:
                 desc = DocCLI.tty_ify(results[plugin])
 
                 if len(desc) > linelimit:
-                    desc = desc[:linelimit] + '...'
+                    desc = f'{desc[:linelimit]}...'
 
                 pbreak = plugin.split('.')
                 # TODO: add mark for deprecated collection plugins
@@ -543,7 +549,7 @@ class DocCLI(CLI, RoleMixin):
                 else:
                     text.append("%-*s %-*.*s" % (displace, plugin, linelimit, len(desc), desc))
 
-        if len(deprecated) > 0:
+        if deprecated:
             text.append("\nDEPRECATED:")
             text.extend(deprecated)
 
@@ -561,21 +567,15 @@ class DocCLI(CLI, RoleMixin):
             for entry_point in list_json[role]['entry_points'].keys():
                 entry_point_names.add(entry_point)
 
-        max_role_len = 0
-        max_ep_len = 0
-
-        if roles:
-            max_role_len = max(len(x) for x in roles)
-        if entry_point_names:
-            max_ep_len = max(len(x) for x in entry_point_names)
-
+        max_role_len = max((len(x) for x in roles), default=0)
+        max_ep_len = max((len(x) for x in entry_point_names), default=0)
         linelimit = display.columns - max_role_len - max_ep_len - 5
         text = []
 
         for role in sorted(roles):
             for entry_point, desc in list_json[role]['entry_points'].items():
                 if len(desc) > linelimit:
-                    desc = desc[:linelimit] + '...'
+                    desc = f'{desc[:linelimit]}...'
                 text.append("%-*s %-*s %s" % (max_role_len, role,
                                               max_ep_len, entry_point,
                                               desc))
@@ -614,13 +614,11 @@ class DocCLI(CLI, RoleMixin):
 
             try:
                 # if no desc, typeerror raised ends this block
-                kdata = {'description': descs[key]}
+                kdata = {'description': descs[key], 'applies_to': []}
 
-                # get playbook objects for keyword and use first to get keyword attributes
-                kdata['applies_to'] = []
                 for pobj in PB_OBJECTS:
                     if pobj not in PB_LOADED:
-                        obj_class = 'ansible.playbook.%s' % pobj.lower()
+                        obj_class = f'ansible.playbook.{pobj.lower()}'
                         loaded_class = importlib.import_module(obj_class)
                         PB_LOADED[pobj] = getattr(loaded_class, pobj, None)
 
@@ -658,7 +656,7 @@ class DocCLI(CLI, RoleMixin):
                 data[key] = kdata
 
             except (AttributeError, KeyError) as e:
-                display.warning("Skipping Invalid keyword '%s' specified: %s" % (key, to_text(e)))
+                display.warning(f"Skipping Invalid keyword '{key}' specified: {to_text(e)}")
                 if display.verbosity >= 3:
                     display.verbose(traceback.format_exc())
 
@@ -688,9 +686,9 @@ class DocCLI(CLI, RoleMixin):
         if content == 'dir':
             results = self._get_plugin_list_descriptions(loader)
         elif content == 'files':
-            results = {k: self.plugins[k][0] for k in self.plugins.keys()}
+            results = {k: self.plugins[k][0] for k in self.plugins}
         else:
-            results = {k: {} for k in self.plugins.keys()}
+            results = {k: {} for k in self.plugins}
             self.plugin_list = set()  # reset for next iteration
 
         return results
@@ -710,7 +708,9 @@ class DocCLI(CLI, RoleMixin):
                 continue
             except Exception as e:
                 if not fail_on_errors:
-                    plugin_docs[plugin] = {'error': 'Missing documentation or could not parse documentation: %s' % to_native(e)}
+                    plugin_docs[plugin] = {
+                        'error': f'Missing documentation or could not parse documentation: {to_native(e)}'
+                    }
                     continue
                 display.vvv(traceback.format_exc())
                 msg = "%s %s missing documentation (or could not parse documentation): %s\n" % (plugin_type, plugin, to_native(e))
@@ -731,7 +731,9 @@ class DocCLI(CLI, RoleMixin):
                 try:
                     json_dump(docs)
                 except Exception as e:  # pylint:disable=broad-except
-                    plugin_docs[plugin] = {'error': 'Cannot serialize documentation as JSON: %s' % to_native(e)}
+                    plugin_docs[plugin] = {
+                        'error': f'Cannot serialize documentation as JSON: {to_native(e)}'
+                    }
                     continue
 
             plugin_docs[plugin] = docs
@@ -758,7 +760,7 @@ class DocCLI(CLI, RoleMixin):
     @staticmethod
     def _prep_loader(plugin_type):
         ''' return a plugint type specific loader '''
-        loader = getattr(plugin_loader, '%s_loader' % plugin_type)
+        loader = getattr(plugin_loader, f'{plugin_type}_loader')
 
         # add to plugin paths from command line
         if context.CLIARGS['basedir'] is not None:
@@ -790,21 +792,22 @@ class DocCLI(CLI, RoleMixin):
         else:
             content = None
 
-        docs = {}
-
         if basedir:
             AnsibleCollectionConfig.playbook_paths = basedir
 
         if plugin_type not in TARGET_OPTIONS:
-            raise AnsibleOptionsError("Unknown or undocumentable plugin type: %s" % plugin_type)
+            raise AnsibleOptionsError(
+                f"Unknown or undocumentable plugin type: {plugin_type}"
+            )
 
+        docs = {}
         if context.CLIARGS['dump']:
             # we always dump all types, ignore restrictions
             ptypes = TARGET_OPTIONS
             docs['all'] = {}
             for ptype in ptypes:
 
-                no_fail = bool(not context.CLIARGS['no_fail_on_errors'])
+                no_fail = not context.CLIARGS['no_fail_on_errors']
                 if ptype == 'role':
                     roles = self._create_role_list(fail_on_errors=no_fail)
                     docs['all'][ptype] = self._create_role_doc(roles.keys(), context.CLIARGS['entry_point'], fail_on_errors=no_fail)
@@ -845,8 +848,9 @@ class DocCLI(CLI, RoleMixin):
                     self.display_plugin_list(docs)
                 elif context.CLIARGS['show_snippet']:
                     if plugin_type not in SNIPPETS:
-                        raise AnsibleError('Snippets are only available for the following plugin'
-                                           ' types: %s' % ', '.join(SNIPPETS))
+                        raise AnsibleError(
+                            f"Snippets are only available for the following plugin types: {', '.join(SNIPPETS)}"
+                        )
 
                     for plugin, doc_data in docs.items():
                         try:
@@ -860,13 +864,17 @@ class DocCLI(CLI, RoleMixin):
                     # Some changes to how plain text docs are formatted
                     for plugin, doc_data in docs.items():
 
-                        textret = DocCLI.format_plugin_doc(plugin, plugin_type,
-                                                           doc_data['doc'], doc_data['examples'],
-                                                           doc_data['return'], doc_data['metadata'])
-                        if textret:
+                        if textret := DocCLI.format_plugin_doc(
+                            plugin,
+                            plugin_type,
+                            doc_data['doc'],
+                            doc_data['examples'],
+                            doc_data['return'],
+                            doc_data['metadata'],
+                        ):
                             text.append(textret)
                         else:
-                            display.warning("No valid documentation was retrieved from '%s'" % plugin)
+                            display.warning(f"No valid documentation was retrieved from '{plugin}'")
 
             elif plugin_type == 'role':
                 if context.CLIARGS['list_dir'] and docs:
@@ -884,17 +892,17 @@ class DocCLI(CLI, RoleMixin):
 
     @staticmethod
     def get_all_plugins_of_type(plugin_type):
-        loader = getattr(plugin_loader, '%s_loader' % plugin_type)
+        loader = getattr(plugin_loader, f'{plugin_type}_loader')
         paths = loader._get_paths_with_context()
         plugins = {}
-        for path_context in paths:
+        for _ in paths:
             plugins.update(list_plugins(plugin_type))
         return sorted(plugins.keys())
 
     @staticmethod
     def get_plugin_metadata(plugin_type, plugin_name):
         # if the plugin lives in a non-python file (eg, win_X.ps1), require the corresponding python file for docs
-        loader = getattr(plugin_loader, '%s_loader' % plugin_type)
+        loader = getattr(plugin_loader, f'{plugin_type}_loader')
         result = loader.find_plugin_with_context(plugin_name, mod_type='.py', ignore_deprecated=True, check_aliases=True)
         if not result.resolved:
             raise AnsibleError("unable to load {0} plugin named {1} ".format(plugin_type, plugin_name))
@@ -906,7 +914,9 @@ class DocCLI(CLI, RoleMixin):
                                             collection_name=collection_name, plugin_type=plugin_type)
         except Exception:
             display.vvv(traceback.format_exc())
-            raise AnsibleError("%s %s at %s has a documentation formatting error or is missing documentation." % (plugin_type, plugin_name, filename))
+            raise AnsibleError(
+                f"{plugin_type} {plugin_name} at {filename} has a documentation formatting error or is missing documentation."
+            )
 
         if doc is None:
             # Removed plugins don't have any documentation
@@ -937,11 +947,7 @@ class DocCLI(CLI, RoleMixin):
         # generate extra data
         if plugin_type == 'module':
             # is there corresponding action plugin?
-            if plugin in action_loader:
-                doc['has_action'] = True
-            else:
-                doc['has_action'] = False
-
+            doc['has_action'] = plugin in action_loader
         # return everything as one dictionary
         return {'doc': doc, 'examples': plainexamples, 'return': returndocs, 'metadata': metadata}
 
@@ -984,7 +990,10 @@ class DocCLI(CLI, RoleMixin):
             text = DocCLI.get_man_text(doc, collection_name, plugin_type)
         except Exception as e:
             display.vvv(traceback.format_exc())
-            raise AnsibleError("Unable to retrieve documentation from '%s' due to: %s" % (plugin, to_native(e)), orig_exc=e)
+            raise AnsibleError(
+                f"Unable to retrieve documentation from '{plugin}' due to: {to_native(e)}",
+                orig_exc=e,
+            )
 
         return text
 
@@ -1015,7 +1024,7 @@ class DocCLI(CLI, RoleMixin):
                         docerror = e
 
             if docerror:
-                display.warning("%s has a documentation formatting error: %s" % (plugin, docerror))
+                display.warning(f"{plugin} has a documentation formatting error: {docerror}")
                 continue
 
             if not doc or not isinstance(doc, dict):
@@ -1055,8 +1064,8 @@ class DocCLI(CLI, RoleMixin):
             if version_added == 'historical':
                 return 'historical'
         if version_added_collection:
-            version_added = '%s of %s' % (version_added, version_added_collection)
-        return 'version %s' % (version_added, )
+            version_added = f'{version_added} of {version_added_collection}'
+        return f'version {version_added}'
 
     @staticmethod
     def add_fields(text, fields, limit, opt_indent, return_values=False, base_indent=''):
@@ -1068,13 +1077,11 @@ class DocCLI(CLI, RoleMixin):
             # required is used as indicator and removed
             required = opt.pop('required', False)
             if not isinstance(required, bool):
-                raise AnsibleError("Incorrect value for 'Required', a boolean is needed.: %s" % required)
-            if required:
-                opt_leadin = "="
-            else:
-                opt_leadin = "-"
-
-            text.append("%s%s %s" % (base_indent, opt_leadin, o))
+                raise AnsibleError(
+                    f"Incorrect value for 'Required', a boolean is needed.: {required}"
+                )
+            opt_leadin = "=" if required else "-"
+            text.append(f"{base_indent}{opt_leadin} {o}")
 
             # description is specifically formated and can either be string or list of strings
             if 'description' not in opt:
@@ -1082,19 +1089,23 @@ class DocCLI(CLI, RoleMixin):
             if is_sequence(opt['description']):
                 for entry_idx, entry in enumerate(opt['description'], 1):
                     if not isinstance(entry, string_types):
-                        raise AnsibleError("Expected string in description of %s at index %s, got %s" % (o, entry_idx, type(entry)))
+                        raise AnsibleError(
+                            f"Expected string in description of {o} at index {entry_idx}, got {type(entry)}"
+                        )
                     text.append(textwrap.fill(DocCLI.tty_ify(entry), limit, initial_indent=opt_indent, subsequent_indent=opt_indent))
-            else:
-                if not isinstance(opt['description'], string_types):
-                    raise AnsibleError("Expected string in description of %s, got %s" % (o, type(opt['description'])))
+            elif isinstance(opt['description'], string_types):
                 text.append(textwrap.fill(DocCLI.tty_ify(opt['description']), limit, initial_indent=opt_indent, subsequent_indent=opt_indent))
+            else:
+                raise AnsibleError(
+                    f"Expected string in description of {o}, got {type(opt['description'])}"
+                )
             del opt['description']
 
-            suboptions = []
-            for subkey in ('options', 'suboptions', 'contains', 'spec'):
-                if subkey in opt:
-                    suboptions.append((subkey, opt.pop(subkey)))
-
+            suboptions = [
+                (subkey, opt.pop(subkey))
+                for subkey in ('options', 'suboptions', 'contains', 'spec')
+                if subkey in opt
+            ]
             if not required and not return_values and 'default' not in opt:
                 opt['default'] = None
 
@@ -1114,7 +1125,12 @@ class DocCLI(CLI, RoleMixin):
                 conf['cli'] = []
                 for cli in opt['cli']:
                     if 'option' not in cli:
-                        conf['cli'].append({'name': cli['name'], 'option': '--%s' % cli['name'].replace('_', '-')})
+                        conf['cli'].append(
+                            {
+                                'name': cli['name'],
+                                'option': f"--{cli['name'].replace('_', '-')}",
+                            }
+                        )
                     else:
                         conf['cli'].append(cli)
                 del opt['cli']
@@ -1143,7 +1159,14 @@ class DocCLI(CLI, RoleMixin):
             for subkey, subdata in suboptions:
                 text.append('')
                 text.append("%s%s:\n" % (opt_indent, subkey.upper()))
-                DocCLI.add_fields(text, subdata, limit, opt_indent + '    ', return_values, opt_indent)
+                DocCLI.add_fields(
+                    text,
+                    subdata,
+                    limit,
+                    f'{opt_indent}    ',
+                    return_values,
+                    opt_indent,
+                )
             if not suboptions:
                 text.append('')
 
@@ -1158,13 +1181,11 @@ class DocCLI(CLI, RoleMixin):
 
         :returns: A array of text suitable for displaying to screen.
         '''
-        text = []
         opt_indent = "        "
         pad = display.columns * 0.20
         limit = max(display.columns - int(pad), 70)
 
-        text.append("> %s    (%s)\n" % (role.upper(), role_json.get('path')))
-
+        text = ["> %s    (%s)\n" % (role.upper(), role_json.get('path'))]
         for entry_point in role_json['entry_points']:
             doc = role_json['entry_points'][entry_point]
 
@@ -1189,18 +1210,23 @@ class DocCLI(CLI, RoleMixin):
 
             if doc.get('attributes'):
                 text.append("ATTRIBUTES:\n")
-                text.append(DocCLI._indent_lines(DocCLI._dump_yaml(doc.pop('attributes')), opt_indent))
-                text.append('')
-
+                text.extend(
+                    (
+                        DocCLI._indent_lines(
+                            DocCLI._dump_yaml(doc.pop('attributes')), opt_indent
+                        ),
+                        '',
+                    )
+                )
             # generic elements we will handle identically
-            for k in ('author',):
+            for k in ('author', ):
                 if k not in doc:
                     continue
                 if isinstance(doc[k], string_types):
                     text.append('%s: %s' % (k.upper(), textwrap.fill(DocCLI.tty_ify(doc[k]),
                                             limit - (len(k) + 2), subsequent_indent=opt_indent)))
                 elif isinstance(doc[k], (list, tuple)):
-                    text.append('%s: %s' % (k.upper(), ', '.join(doc[k])))
+                    text.append(f"{k.upper()}: {', '.join(doc[k])}")
                 else:
                     # use empty indent since this affects the start of the yaml doc, not it's keys
                     text.append(DocCLI._indent_lines(DocCLI._dump_yaml({k.upper(): doc[k]}), ''))

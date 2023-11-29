@@ -45,14 +45,16 @@ def main():
 
         for source_file in source_files:
             source_path = os.path.join(source, source_file)
-            destination_path = os.path.join(destination_directory, source_file + '.' + label)
-            print('"%s" -> "%s"' % (source_path, destination_path))
+            destination_path = os.path.join(
+                destination_directory, f'{source_file}.{label}'
+            )
+            print(f'"{source_path}" -> "{destination_path}"')
             shutil.copyfile(source_path, destination_path)
             count += 1
 
     print('Coverage file count: %d' % count)
     print('##vso[task.setVariable variable=coverageFileCount]%d' % count)
-    print('##vso[task.setVariable variable=outputPath]%s' % output_path)
+    print(f'##vso[task.setVariable variable=outputPath]{output_path}')
 
 
 if __name__ == '__main__':

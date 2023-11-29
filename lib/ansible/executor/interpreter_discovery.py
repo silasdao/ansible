@@ -64,7 +64,7 @@ def discover_interpreter(action, interpreter_name, discovery_mode, task_vars):
         display.vvv(msg=u"Attempting {0} interpreter discovery".format(interpreter_name), host=host)
 
         # not all command -v impls accept a list of commands, so we have to call it once per python
-        command_list = ["command -v '%s'" % py for py in bootstrap_python_list]
+        command_list = [f"command -v '{py}'" for py in bootstrap_python_list]
         shell_bootstrap = "echo PLATFORM; uname; echo FOUND; {0}; echo ENDFOUND".format('; '.join(command_list))
 
         # FUTURE: in most cases we probably don't want to use become, but maybe sometimes we do?
@@ -186,9 +186,7 @@ def _get_linux_distro(platform_info):
 
 
 def _version_fuzzy_match(version, version_map):
-    # try exact match first
-    res = version_map.get(version)
-    if res:
+    if res := version_map.get(version):
         return res
 
     sorted_looseversions = sorted([LooseVersion(v) for v in version_map.keys()])

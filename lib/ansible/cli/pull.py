@@ -68,9 +68,9 @@ class PullCLI(CLI):
         if context.CLIARGS.get('inventory', False):
             for inv in context.CLIARGS['inventory']:
                 if isinstance(inv, list):
-                    inv_opts += " -i '%s' " % ','.join(inv)
+                    inv_opts += f" -i '{','.join(inv)}' "
                 elif ',' in inv or os.path.exists(inv):
-                    inv_opts += ' -i %s ' % inv
+                    inv_opts += f' -i {inv} '
 
         return inv_opts
 
@@ -109,9 +109,13 @@ class PullCLI(CLI):
                                  help='branch/tag/commit to checkout. Defaults to behavior of repository module.')
         self.parser.add_argument('--accept-host-key', default=False, dest='accept_host_key', action='store_true',
                                  help='adds the hostkey for the repo url if not already added')
-        self.parser.add_argument('-m', '--module-name', dest='module_name', default=self.DEFAULT_REPO_TYPE,
-                                 help='Repository module name, which ansible will use to check out the repo. Choices are %s. Default is %s.'
-                                      % (self.REPO_CHOICES, self.DEFAULT_REPO_TYPE))
+        self.parser.add_argument(
+            '-m',
+            '--module-name',
+            dest='module_name',
+            default=self.DEFAULT_REPO_TYPE,
+            help=f'Repository module name, which ansible will use to check out the repo. Choices are {self.REPO_CHOICES}. Default is {self.DEFAULT_REPO_TYPE}.',
+        )
         self.parser.add_argument('--verify-commit', dest='verify', default=False, action='store_true',
                                  help='verify GPG signature of checked out commit, if it fails abort running the playbook. '
                                       'This needs the corresponding VCS module to support such an operation')
@@ -136,20 +140,24 @@ class PullCLI(CLI):
         options.dest = os.path.expandvars(os.path.expanduser(options.dest))
 
         if os.path.exists(options.dest) and not os.path.isdir(options.dest):
-            raise AnsibleOptionsError("%s is not a valid or accessible directory." % options.dest)
+            raise AnsibleOptionsError(
+                f"{options.dest} is not a valid or accessible directory."
+            )
 
         if options.sleep:
             try:
                 secs = random.randint(0, int(options.sleep))
                 options.sleep = secs
             except ValueError:
-                raise AnsibleOptionsError("%s is not a number." % options.sleep)
+                raise AnsibleOptionsError(f"{options.sleep} is not a number.")
 
         if not options.url:
             raise AnsibleOptionsError("URL for repository not specified, use -h for help")
 
         if options.module_name not in self.REPO_CHOICES:
-            raise AnsibleOptionsError("Unsupported repo module %s, choices are %s" % (options.module_name, ','.join(self.REPO_CHOICES)))
+            raise AnsibleOptionsError(
+                f"Unsupported repo module {options.module_name}, choices are {','.join(self.REPO_CHOICES)}"
+            )
 
         display.verbosity = options.verbosity
         self.validate_conflicts(options)

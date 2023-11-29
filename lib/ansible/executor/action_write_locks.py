@@ -37,7 +37,7 @@ if 'action_write_locks' not in globals():
     # These plugins are known to be called directly by action plugins with names differing from the
     # action plugin name.  We precreate them here as an optimization.
     # If a list of service managers is created in the future we can do the same for them.
-    mods = set(p['name'] for p in PKG_MGRS)
+    mods = {p['name'] for p in PKG_MGRS}
 
     mods.update(('copy', 'file', 'setup', 'slurp', 'stat'))
     for mod_name in mods:
